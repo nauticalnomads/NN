@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Nautical Nomads — design tokens
+   Brand bible §9.2. Horizon is the primary system; Tempest & Lagoon are
+   alternate, toggleable palettes (set `data-theme` on <html>).
+
+   NOTE: Only the Horizon hexes are specified in the brand bible. Tempest and
+   Lagoon values below are PROPOSED placeholders — see PROGRESS.md. They keep
+   the same six token roles so swapping palettes never changes the layout.
+   ───────────────────────────────────────────────────────────────────────── */
+
+@theme inline {
+  /* Map brand tokens onto Tailwind's color scale so utilities like
+     `bg-surface`, `text-ink`, `text-accent-sun` work everywhere. */
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-accent-sun: var(--accent-sun);
+  --color-accent-sea: var(--accent-sea);
+  --color-accent-sand: var(--accent-sand);
+
+  /* Fonts (loaded via next/font in lib/fonts.ts) */
+  --font-display: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SFMono-Regular", monospace;
+
+  /* Type scale — Display 1 → Caption (brand bible §9.2) */
+  --text-display-1: 4.5rem;
+  --text-display-1--line-height: 1.05;
+  --text-display-2: 3rem;
+  --text-display-2--line-height: 1.1;
+  --text-heading: 2rem;
+  --text-heading--line-height: 1.2;
+  --text-sub: 1.375rem;
+  --text-sub--line-height: 1.3;
+  --text-body: 1.0625rem;
+  --text-body--line-height: 1.6;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.4;
+}
+
+/* Horizon — primary system (brand bible §9.2) */
+:root,
+[data-theme="horizon"] {
+  --surface: #faf6ec; /* Hull White */
+  --surface-2: #efe8d8; /* Driftwood */
+  --ink: #2a2826; /* Deep Ink */
+  --accent-sun: #c75d3e; /* Terracotta */
+  --accent-sea: #4a6b85; /* Faded Denim */
+  --accent-sand: #b39570; /* Driftwood Tan */
+}
+
+/* Tempest — stormier alternate (PROPOSED, pending brand sign-off) */
+[data-theme="tempest"] {
+  --surface: #eef1f3;
+  --surface-2: #dce2e6;
+  --ink: #1f262b;
+  --accent-sun: #c25a3c;
+  --accent-sea: #2f4a5c;
+  --accent-sand: #8a9399;
+}
+
+/* Lagoon — brighter coastal alternate (PROPOSED, pending brand sign-off) */
+[data-theme="lagoon"] {
+  --surface: #f3faf7;
+  --surface-2: #dff0ea;
+  --ink: #1d2b2a;
+  --accent-sun: #e07a4d;
+  --accent-sea: #2a8c8c;
+  --accent-sand: #9bbfae;
+}
+
+html {
+  background-color: var(--surface);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--font-body);
+  min-height: 100dvh;
+}
+
+::selection {
+  background-color: var(--accent-sun);
+  color: var(--surface);
+}

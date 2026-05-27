@@ -1,0 +1,9 @@
+.next/
+.open-next/
+.wrangler/
+node_modules/
+out/
+build/
+package-lock.json
+pnpm-lock.yaml
+*.tsbuildinfo
