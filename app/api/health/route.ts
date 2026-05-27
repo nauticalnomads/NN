@@ -17,9 +17,10 @@ export async function GET() {
 
   try {
     const supabase = await createClient();
-    const { error } = await supabase.auth.getSession();
+    // Cheap, anon-readable query that also confirms the schema is migrated.
+    const { error } = await supabase.from("products").select("id", { head: true, count: "exact" });
     if (error) throw error;
-    return NextResponse.json({ ok: true, supabase: "reachable" });
+    return NextResponse.json({ ok: true, supabase: "reachable", schema: "migrated" });
   } catch (err) {
     return NextResponse.json(
       { ok: false, supabase: "error", detail: err instanceof Error ? err.message : String(err) },

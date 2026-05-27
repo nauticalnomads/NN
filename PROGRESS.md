@@ -81,9 +81,53 @@ These are infrastructure steps that require your accounts/credentials:
    `npm run email:smoke` and confirm the test email lands in the inbox (not spam).
 4. **Secrets stay out of the repo** — set them in Cloudflare/Supabase only.
 
+---
+
+## Session 02 — Database Schema & Supabase Setup ✅ (code complete; you run the SQL)
+
+A complete, migration-versioned schema with RLS, indexes, typed clients, and seeded settings.
+
+### Built
+
+- **Versioned migrations** in `/supabase/migrations` (no dashboard edits):
+  - `…120000_init.sql` — `pgcrypto`, 11 enums, the `set_updated_at()` trigger, all **16 tables**
+    (§4), POD mapping fields (`provider`/`provider_product_id`/`provider_variant_id`/`base_cost`)
+    on products + variants, an **immutable `order_items` snapshot**, `fulfilment_attempts`
+    (with unique `idempotency_key`) and `notifications`, plus indexes on slugs/status/created_at/
+    provider IDs.
+  - `…120001_rls.sql` — `SECURITY DEFINER` role helpers (`current_user_role`, `is_master`,
+    `is_ops`, `is_staff`) and RLS on every table enforcing the §3 matrix.
+  - `…120002_seed.sql` — singleton `store_settings` (VAT **off**, live shipping, auto-fulfilment
+    **on**, `fulfilment_dry_run` **on**, brand voice seeded with §9.3 + 6 example captions + 3
+    example product descriptions) and `shipping_settings` (UK/EU/RoW flat zones).
+- `supabase/seed_master_admin.sql` — promote the owner to `master` (run after they sign up).
+- **TS types** `lib/database.types.ts` (Row/Insert/Update + enums) wired into all Supabase clients.
+- `/api/health` now does an anon-readable `products` count → confirms connectivity **and** that
+  the schema is migrated.
+
+### Verified (against a throwaway local Postgres 16)
+
+- All migrations **apply cleanly from scratch**; 16 tables, 16 RLS-enabled, 29 policies, seed loads.
+- RLS behaves: **anon** sees only `published` products and **cannot** read `store_settings`;
+  **customer A** sees only their own order; **customer B** sees 0 (no cross-customer leakage).
+
+### Decisions
+
+- **Money** = `numeric(12,2)` + `currency` (default `GBP`); `tax_total` defaults 0 (VAT off).
+- **Settings are ops-only** under RLS. The storefront/checkout read settings **server-side via the
+  service client**, not anon — keeps `make_webhook_url`/`social_config` out of public reach.
+- **`compare_at_price`** on products powers on-sale detection (blog auto-queue, Session 13).
+- **`fulfilment_dry_run`** defaults **on** so no real POD orders are ever placed until explicitly
+  turned off in production (Session 07 safety rail).
+
+### ⚠️ You need to run the SQL
+
+The migrations are not auto-applied (no DB credentials in the web sandbox). Run the consolidated
+SQL I provided in chat against your Supabase project (SQL Editor), then run `seed_master_admin.sql`
+with your email after you've signed up. After that, `/api/health` should report
+`{ ok: true, schema: "migrated" }`.
+
 ### Next session
 
-**Session 02 — Database schema & Supabase setup.** Versioned SQL migrations in
-`/supabase/migrations` for all §4 tables (incl. `fulfilment_attempts`, `notifications`), POD
-mapping fields, RLS per the §3 permission matrix, indexes, generated TS types, and seeded
-`store_settings` (VAT off, live shipping, auto-fulfilment on, brand voice + example captions).
+**Session 03 — Shopify migration** (Admin API → clean → map to provider → import), or **Session 04
+— Storefront**. 03 needs your Shopify Admin API token + Printful/Printify keys.
