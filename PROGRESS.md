@@ -69,9 +69,10 @@ Nautical Nomads design tokens in place.
 
 These are infrastructure steps that require your accounts/credentials:
 
-1. **Cloudflare deploy.** Connect this repo to Cloudflare (Workers/Pages) and run `npm run deploy`
-   (or wire CI deploy). Confirm the live URL renders `/styleguide`. _(Session 01 done-criterion
-   that needs your Cloudflare account.)_
+1. **Cloudflare deploy.** Repo is connected to Cloudflare Workers Builds. `npm run build` now runs
+   the **OpenNext** build (`opennextjs-cloudflare build`) so it emits `.open-next/worker.js` for
+   `wrangler deploy` — keep the project's Build command as `npm run build` and Deploy as
+   `npx wrangler deploy`. Confirm the live URL renders `/styleguide`. _(Needs your Cloudflare account.)_
 2. **Supabase env vars.** Create/confirm the Supabase project, then set `NEXT_PUBLIC_SUPABASE_URL`,
    `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` in Cloudflare (and `.env.local`
    for dev). Hit `/api/health` — it should return `{ ok: true }`.
