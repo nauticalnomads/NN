@@ -171,7 +171,70 @@ empty-states until the Session 03 migration lands.
 - Set **`NEXT_PUBLIC_SITE_URL`** in Cloudflare (and locally) so canonicals/sitemap/OG use the right
   host.
 
-### Next session
+---
 
-**Session 03 — Shopify migration** (Admin API → clean → map to provider → import). Needs your
-Shopify Admin API token + Printful/Printify keys. Then **Session 08 — Roles & Auth** (testable).
+## Sessions 03, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14 — built between PROGRESS.md updates
+
+(PROGRESS.md was stale through these — closing the gap now. Full session-by-session detail in
+the commit messages: `486ffbc` (Session 03), `0ebbb7b` (08), `6f839c6` (05), `1baf80c` (06+07+
+09+10+11+12+13+14). Audit at `docs/audit-2026-05.md` (or chat transcript) catalogues remaining
+gaps and prioritised fixes.)
+
+**Highlights:**
+
+- Session 03 — Shopify migration script rewritten with empirically-derived provider mapping
+  (Printful sync-products + SKU-pattern fallback, Printify external.id, JetPrint vendor +
+  best-guess API). Dry-run on real catalogue: 273 clean / 4 flagged (compare_at_price reversed)
+  / 0 unmapped across 277 products.
+- Session 05 — Cart, Stripe Checkout (hosted), webhook with idempotent paid-flip, immutable
+  `order_items` snapshot including `provider`/`provider_product_id`/`provider_variant_id`,
+  /orders/[id] confirmation page.
+- Session 06 — Printful live shipping working; Printify shipping currently stubs to null and
+  falls through to flat-zone fallback (called out in audit as launch-blocker #3).
+- Session 07 — Auto-fulfilment with kill-switch + dry-run; Printful + Printify order placement,
+  webhook listeners for tracking. JetPrint placement is a `MANUAL-…` placeholder (audit #2).
+- Session 08 — Magic-link auth, role guards (master/regular/content) enforced server-side
+  on every `/admin/**` route and action. Verified by grep + smoke test.
+- Session 09 — Financial dashboard with date-range, Stripe balance-transactions, COGS from
+  local snapshots, CSV export. **PDF export missing** (audit #13).
+- Session 10 — Refunds: customer request from `/orders/[id]`, admin Stripe-API issue from
+  `/admin/refunds`. Stripe `charge.refunded`/`refund.updated` handlers currently no-op (#8).
+- Session 11 — Resend templates (order confirm, shipping auto-from-POD-webhook, refund,
+  welcome, abandoned-cart, owner alert). **Welcome + owner-alert + abandoned-cart cron all
+  not wired to triggers** (audit #4, #5, #15).
+- Session 12 — Drive-listing service-account, Anthropic vision captioning, Make.com webhook.
+  **Scheduling missing** (#19), **no admin UI for `make_webhook_url`** (#16).
+- Session 13 — Manual URL-paste draft works. **Auto-queue triggers dead code** (#12), markdown
+  not rendered (#17).
+- Session 14 — RUNBOOK.md with pre-launch checklist, cutover, ops, kill-switches.
+
+---
+
+## Session 03b — Migration FIRST REAL RUN
+
+Discovered two schema/code mismatches that the dry-run didn't surface (dry-run never writes):
+
+1. `migrate-shopify.mjs` was inserting `provider` on variant rows. `variants` table has no
+   such column — provider lives on products. First run wrote 99 products, then variants
+   insert error rolled back every subsequent operation (variants, images). Result: 99 orphan
+   products, 0 variants, 0 image rows.
+2. `app/checkout/actions.ts` was reading `provider` from variants (same bug) and **omitting
+   `provider`/`provider_product_id`/`provider_variant_id` from the `order_items` snapshot**.
+   Means checkout would have crashed at enrichment, and even if it hadn't, fulfilment had
+   nothing to dispatch from. Latent — would have hit on first real purchase.
+
+Both fixed. Migration restarted. Idempotent on `(source, source_id)` so orphans get updated
+in place rather than duplicated. Real-run report to be appended once complete.
+
+### Next step (launch-blocker order from audit)
+
+After the migration run + visual verification at `/admin/products` and `/shop`:
+
+1. ✅ Migration (in progress here)
+2. ⏳ JetPrint integration (real `placeJetprint()` + end-to-end test)
+3. ⏳ Printify live shipping
+4. ⏳ Admin shipping-zone editor
+5. ⏳ Owner-alert wiring + `/admin/notifications` inbox
+6. ⏳ `/admin/orders/[id]` detail + manual-fallback view + retry button
+7. ⏳ Retry-with-backoff for transient POD failures
+8. ⏳ Stripe `charge.refunded` / `refund.updated` reconciliation

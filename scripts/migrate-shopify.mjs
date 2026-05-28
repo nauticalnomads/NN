@@ -277,7 +277,8 @@ async function normalise(p, seq, sb, pfMap, pyMap, jpMap) {
       color: opts.color || opts.colour || null,
       price: Number(v.price) || 0,
       base_cost: baseCost,
-      provider: m.provider,
+      // NB: `provider` lives on the product row, not the variant. We keep
+      // provider_variant_id (the per-variant pointer) here for fulfilment.
       provider_variant_id: m.provider_variant_id ?? null,
       sort_order: vIdx - 1,
     });
@@ -393,14 +394,10 @@ async function upsertProduct(sb, normalized, autoPublish) {
     if (ev) {
       const vRow = { ...v, product_id: productId };
       const { error } = await sb.from("variants").update(vRow).eq("id", ev.id);
-      if (error && error.code === "22P02" && (error.message || "").includes("jetprint")) {
-        vRow.provider = null;
-        await sb.from("variants").update(vRow).eq("id", ev.id);
-      } else if (error) {
-        throw error;
-      }
+      if (error) throw error;
     } else {
-      // SKU collision guard + jetprint-enum fallback
+      // SKU collision guard (variants table has no provider column → no
+      // jetprint enum fallback needed here).
       const tryRow = { ...v, product_id: productId };
       let suffix = 1;
       while (true) {
@@ -409,10 +406,6 @@ async function upsertProduct(sb, normalized, autoPublish) {
         if (error.code === "23505" && (error.message || "").includes("variants_sku")) {
           suffix++;
           tryRow.sku = `${v.sku}-${suffix}`;
-          continue;
-        }
-        if (error.code === "22P02" && (error.message || "").includes("jetprint")) {
-          tryRow.provider = null;
           continue;
         }
         throw error;

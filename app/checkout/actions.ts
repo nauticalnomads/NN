@@ -24,18 +24,30 @@ export async function createCheckoutSession(
 
   const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0);
   const sb = createServiceClient();
-  // Enrich cart lines with provider mapping (needed for live shipping quotes
-  // + fulfilment). One round-trip lookup of all variants in the cart.
+  // Enrich cart lines with provider mapping for live shipping + fulfilment.
+  // `provider` + `provider_product_id` live on the products table; per-variant
+  // `provider_variant_id` lives on variants. One join, one round-trip.
   const variantIds = items.map((i) => i.variantId);
   const { data: variantRows } = await sb
     .from("variants")
-    .select("id, provider, provider_variant_id")
+    .select("id, provider_variant_id, products(provider, provider_product_id)")
     .in("id", variantIds);
-  type V = { id: string; provider: CartLine["provider"]; provider_variant_id: string | null };
+  type V = {
+    id: string;
+    provider_variant_id: string | null;
+    products: { provider: CartLine["provider"]; provider_product_id: string | null } | null;
+  };
   const byId = new Map<string, V>(((variantRows as unknown as V[]) ?? []).map((v) => [v.id, v]));
+  const enrich = (variantId: string) => {
+    const v = byId.get(variantId);
+    return {
+      provider: v?.products?.provider ?? null,
+      provider_product_id: v?.products?.provider_product_id ?? null,
+      provider_variant_id: v?.provider_variant_id ?? null,
+    };
+  };
   const cartLines: CartLine[] = items.map((i) => ({
-    provider: byId.get(i.variantId)?.provider ?? null,
-    provider_variant_id: byId.get(i.variantId)?.provider_variant_id ?? null,
+    ...enrich(i.variantId),
     quantity: i.quantity,
   }));
 
@@ -65,19 +77,26 @@ export async function createCheckoutSession(
   }
   const orderId = (order as unknown as { id: string }).id;
 
-  // Snapshot the line items NOW (immutable). Order items reference variants/products
-  // for analytics but their displayed values come from these snapshot columns.
-  const itemRows = items.map((i) => ({
-    order_id: orderId,
-    product_id: i.productId,
-    variant_id: i.variantId,
-    title: i.title,
-    variant_title: i.variantTitle,
-    sku: i.sku,
-    unit_price: i.price,
-    quantity: i.quantity,
-    currency: i.currency,
-  }));
+  // Snapshot the line items NOW (immutable, master §4 golden rule). Includes
+  // provider + per-line provider IDs so fulfilment can dispatch from the
+  // snapshot alone, never re-reading live product data.
+  const itemRows = items.map((i) => {
+    const e = enrich(i.variantId);
+    return {
+      order_id: orderId,
+      product_id: i.productId,
+      variant_id: i.variantId,
+      title: i.title,
+      variant_title: i.variantTitle,
+      sku: i.sku,
+      provider: e.provider,
+      provider_product_id: e.provider_product_id,
+      provider_variant_id: e.provider_variant_id,
+      unit_price: i.price,
+      quantity: i.quantity,
+      currency: i.currency,
+    };
+  });
   await sb.from("order_items").insert(itemRows as never);
 
   // Build Stripe line items + flat shipping option.
