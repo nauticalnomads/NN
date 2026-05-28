@@ -14,7 +14,9 @@
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
-    "email:smoke": "node scripts/resend-smoke-test.mjs"
+    "email:smoke": "node scripts/resend-smoke-test.mjs",
+    "migrate:shopify": "node --env-file-if-exists=.env.local scripts/migrate-shopify.mjs",
+    "migrate:shopify:dry": "node --env-file-if-exists=.env.local scripts/migrate-shopify.mjs --dry-run"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
