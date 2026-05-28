@@ -2,7 +2,7 @@
 
 import { getStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/service";
-import { quoteShipping, type ShippingAddress } from "@/lib/shipping";
+import { quoteShipping, type ShippingAddress, type CartLine } from "@/lib/shipping";
 import type { CartItem } from "@/components/cart/CartProvider";
 import { absoluteUrl } from "@/lib/site";
 
@@ -23,12 +23,24 @@ export async function createCheckoutSession(
   }
 
   const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0);
-  const shipping = await quoteShipping(shipping_address, items.length);
-  const currency = (items[0]?.currency || "GBP").toLowerCase();
-
-  // Pre-create the order in 'pending' state with the immutable snapshot.
-  // The Stripe webhook flips it to 'paid' on success.
   const sb = createServiceClient();
+  // Enrich cart lines with provider mapping (needed for live shipping quotes
+  // + fulfilment). One round-trip lookup of all variants in the cart.
+  const variantIds = items.map((i) => i.variantId);
+  const { data: variantRows } = await sb
+    .from("variants")
+    .select("id, provider, provider_variant_id")
+    .in("id", variantIds);
+  type V = { id: string; provider: CartLine["provider"]; provider_variant_id: string | null };
+  const byId = new Map<string, V>(((variantRows as unknown as V[]) ?? []).map((v) => [v.id, v]));
+  const cartLines: CartLine[] = items.map((i) => ({
+    provider: byId.get(i.variantId)?.provider ?? null,
+    provider_variant_id: byId.get(i.variantId)?.provider_variant_id ?? null,
+    quantity: i.quantity,
+  }));
+
+  const shipping = await quoteShipping(cartLines, shipping_address);
+  const currency = (items[0]?.currency || "GBP").toLowerCase();
   const orderRow = {
     email,
     status: "pending" as const,

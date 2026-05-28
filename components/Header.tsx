@@ -5,6 +5,7 @@ import { CartIcon } from "@/components/cart/CartIcon";
 
 const nav = [
   { href: "/shop", label: "Shop" },
+  { href: "/journal", label: "Journal" },
   { href: "/about", label: "About" },
 ];
 

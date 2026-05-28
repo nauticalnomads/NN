@@ -1,0 +1,67 @@
+// Lightweight Anthropic API wrapper for blog drafting + social captions.
+// Uses the Messages API; defaults to claude-sonnet-4-6 for cost/quality.
+
+const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
+
+export async function complete(prompt: string, system?: string): Promise<string | null> {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return null;
+  try {
+    const res = await fetch(ANTHROPIC_API, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 2048,
+        ...(system ? { system } : {}),
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!res.ok) return null;
+    const j = await res.json();
+    return j?.content?.[0]?.text ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// For image captioning (Session 12). Accepts a public image URL.
+export async function captionImage(imageUrl: string, brandVoice: string): Promise<string | null> {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return null;
+  const system = `You write social captions in Nautical Nomads' brand voice.\n\n${brandVoice}\n\nWrite ONE caption only — short, minimal, lowercase-friendly, no exclamation marks, emoji allowed sparingly. No hashtags.`;
+  try {
+    const res = await fetch(ANTHROPIC_API, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 200,
+        system,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "image", source: { type: "url", url: imageUrl } },
+              { type: "text", text: "Caption this photo." },
+            ],
+          },
+        ],
+      }),
+    });
+    if (!res.ok) return null;
+    const j = await res.json();
+    return j?.content?.[0]?.text?.trim() ?? null;
+  } catch {
+    return null;
+  }
+}

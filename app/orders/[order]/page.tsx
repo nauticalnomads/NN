@@ -4,6 +4,7 @@ import { Container } from "@/components/Container";
 import { createServiceClient } from "@/lib/supabase/service";
 import { formatPrice } from "@/lib/format";
 import { ClearCart } from "./ClearCart";
+import { RequestRefund } from "./RequestRefund";
 
 export const metadata: Metadata = {
   title: "Order confirmation",
@@ -19,11 +20,7 @@ type OrderRow = {
   created_at: string;
 };
 
-export default async function OrderPage({
-  params,
-}: {
-  params: Promise<{ order: string }>;
-}) {
+export default async function OrderPage({ params }: { params: Promise<{ order: string }> }) {
   const { order } = await params;
   let row: OrderRow | null = null;
   try {
@@ -33,7 +30,7 @@ export default async function OrderPage({
       .select("id, email, status, grand_total, currency, created_at")
       .eq("id", order)
       .maybeSingle();
-    row = (data as unknown) as OrderRow | null;
+    row = data as unknown as OrderRow | null;
   } catch {
     // Storefront is OK without Supabase; show 404.
   }
@@ -55,11 +52,20 @@ export default async function OrderPage({
           : "Hang on a moment. If it doesn't update shortly, check your email for the receipt."}
       </p>
       <div className="mt-10 rounded-sm border border-ink/10 p-5 font-mono text-caption text-ink/70">
-        <p>Order id: <span className="text-ink">{r.id}</span></p>
-        <p>Email:    <span className="text-ink">{r.email}</span></p>
-        <p>Total:    <span className="text-ink">{formatPrice(r.grand_total, r.currency)}</span></p>
-        <p>Status:   <span className="text-ink uppercase">{r.status}</span></p>
+        <p>
+          Order id: <span className="text-ink">{r.id}</span>
+        </p>
+        <p>
+          Email: <span className="text-ink">{r.email}</span>
+        </p>
+        <p>
+          Total: <span className="text-ink">{formatPrice(r.grand_total, r.currency)}</span>
+        </p>
+        <p>
+          Status: <span className="text-ink uppercase">{r.status}</span>
+        </p>
       </div>
+      {paid && <RequestRefund orderId={r.id} total={r.grand_total} currency={r.currency} />}
     </Container>
   );
 }

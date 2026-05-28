@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/service";
+import { autoFulfilOrder } from "@/lib/fulfilment";
+import { sendOrderConfirmation } from "@/lib/email";
 
 // Trust the WEBHOOK, not the redirect — Stripe Checkout's success_url can be
 // reached without paying (e.g. browser back). We only flip status to 'paid'
@@ -45,6 +47,9 @@ export async function POST(request: Request) {
           } as never)
           .eq("id", orderId)
           .neq("status", "paid"); // idempotency: don't downgrade
+        // Fire-and-forget: confirmation email + auto-fulfilment trigger.
+        sendOrderConfirmation(orderId).catch((e) => console.error("confirmation email:", e));
+        autoFulfilOrder(orderId).catch((e) => console.error("auto-fulfil:", e));
         break;
       }
       case "charge.refunded":
