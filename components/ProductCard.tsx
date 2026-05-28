@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
-import type { ProductWithRelations } from "@/lib/queries";
-import { primaryImage } from "@/lib/queries";
+import type { ProductWithRelations } from "@/lib/product";
+import { primaryImage } from "@/lib/product";
 import { formatPrice, isOnSale } from "@/lib/format";
 
 export function ProductCard({ product }: { product: ProductWithRelations }) {

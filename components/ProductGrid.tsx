@@ -1,4 +1,4 @@
-import type { ProductWithRelations } from "@/lib/queries";
+import type { ProductWithRelations } from "@/lib/product";
 import { ProductCard } from "@/components/ProductCard";
 
 export function ProductGrid({

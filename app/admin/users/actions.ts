@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireMaster } from "@/lib/auth";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import type { UserRole } from "@/lib/database.types";
 
 // All actions here are master-only. Service client used because admin invites
@@ -20,9 +20,7 @@ export async function inviteUser(formData: FormData) {
     return;
   }
   // Mirror to public.users with the chosen role.
-  await sb
-    .from("users")
-    .upsert({ id: data.user.id, email, role, is_active: true } as never);
+  await sb.from("users").upsert({ id: data.user.id, email, role, is_active: true } as never);
   revalidatePath("/admin/users");
 }
 
@@ -32,7 +30,10 @@ export async function setRole(formData: FormData) {
   const role = String(formData.get("role") || "content") as UserRole;
   if (!id) return;
   const sb = createServiceClient();
-  await sb.from("users").update({ role } as never).eq("id", id);
+  await sb
+    .from("users")
+    .update({ role } as never)
+    .eq("id", id);
   revalidatePath("/admin/users");
 }
 

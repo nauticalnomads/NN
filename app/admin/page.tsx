@@ -12,7 +12,11 @@ export default async function AdminDashboard({
 
   // Cheap headline counts; ignore errors silently — RLS / missing schema is OK.
   async function count(query: PromiseLike<{ count: number | null }>): Promise<number> {
-    try { return (await query).count ?? 0; } catch { return 0; }
+    try {
+      return (await query).count ?? 0;
+    } catch {
+      return 0;
+    }
   }
   const [productCount, orderCount, draftCount] = await Promise.all([
     count(sb.from("products").select("id", { head: true, count: "exact" })),

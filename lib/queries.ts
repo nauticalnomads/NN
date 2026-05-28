@@ -1,10 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
-import type { ProductRow, VariantRow, ProductImageRow, CollectionRow } from "@/lib/database.types";
+import type { CollectionRow } from "@/lib/database.types";
+import { primaryImage, type ProductWithRelations } from "@/lib/product";
 
-export type ProductWithRelations = ProductRow & {
-  variants: VariantRow[];
-  product_images: ProductImageRow[];
-};
+export { primaryImage };
+export type { ProductWithRelations };
 
 // All storefront reads go through the anon client + RLS, which already limits
 // rows to `published`. Every helper degrades to an empty/null result if Supabase
@@ -141,11 +140,5 @@ export async function getCollectionBySlug(
   }
 }
 
-// Primary image (or first) for a product, with alt-text fallback to the title.
-export function primaryImage(product: ProductWithRelations) {
-  const images = [...(product.product_images ?? [])].sort(
-    (a, b) => Number(b.is_primary) - Number(a.is_primary) || a.sort_order - b.sort_order,
-  );
-  const img = images[0];
-  return img ? { url: img.url, alt: img.alt || product.title } : null;
-}
+// (primaryImage moved to lib/product.ts so client components can use it
+// without dragging server-only code into their bundle.)

@@ -1,6 +1,6 @@
 import { site, absoluteUrl } from "@/lib/site";
-import type { ProductWithRelations } from "@/lib/queries";
-import { primaryImage } from "@/lib/queries";
+import type { ProductWithRelations } from "@/lib/product";
+import { primaryImage } from "@/lib/product";
 
 export function organizationLd() {
   return {

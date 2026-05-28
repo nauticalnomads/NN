@@ -1,10 +1,12 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import type { Database } from "@/lib/database.types";
 
 // Server-side Supabase client bound to the request cookies (anon key + RLS).
-// Use this in Server Components, Route Handlers, and Server Actions.
+// Use in Server Components, Route Handlers, and Server Actions. For trusted
+// server contexts (no user session, bypass RLS), use createServiceClient
+// from `@/lib/supabase/service` instead — that lives in its own file so it
+// doesn't drag next/headers into client bundles.
 export async function createClient() {
   const cookieStore = await cookies();
 
@@ -31,12 +33,5 @@ export async function createClient() {
   );
 }
 
-// Privileged server client (service role) — bypasses RLS. NEVER import this
-// into client code. Use only in trusted server contexts (migrations, webhooks).
-export function createServiceClient() {
-  return createSupabaseClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } },
-  );
-}
+// Re-export so existing imports keep working during migration.
+export { createServiceClient } from "@/lib/supabase/service";

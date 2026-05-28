@@ -5,6 +5,7 @@ import { Footer } from "@/components/Footer";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { organizationLd } from "@/lib/structured-data";
 import { allowIndexing, site } from "@/lib/site";
+import { CartProvider } from "@/components/cart/CartProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -38,9 +39,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" data-theme="horizon" className={fontVariables}>
       <body className="flex min-h-dvh flex-col bg-surface text-ink">
         <JsonLd data={organizationLd()} />
-        <Header />
-        <main className="flex-1">{children}</main>
-        <Footer />
+        <CartProvider>
+          <Header />
+          <main className="flex-1">{children}</main>
+          <Footer />
+        </CartProvider>
       </body>
     </html>
   );

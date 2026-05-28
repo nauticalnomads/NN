@@ -24,7 +24,8 @@
     "@supabase/supabase-js": "^2.45.4",
     "next": "^15.1.6",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "stripe": "^17.5.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250121.0",

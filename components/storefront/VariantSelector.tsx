@@ -1,12 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { ProductWithRelations } from "@/lib/queries";
+import type { ProductWithRelations } from "@/lib/product";
 import { formatPrice } from "@/lib/format";
+import { primaryImage } from "@/lib/product";
+import { useCart } from "@/components/cart/CartProvider";
 
 // Functional variant selection: choosing size/colour resolves the matching
-// variant and reflects its price. The add-to-bag action is wired up in
-// Session 05 (cart + checkout) — disabled here so the choice is honest.
+// variant and reflects its price. Add-to-bag pushes the immutable snapshot
+// (price, sku, provider ids) into the cart store so checkout can build the
+// order without re-reading live product data.
 export function VariantSelector({ product }: { product: ProductWithRelations }) {
   const variants = useMemo(() => product.variants ?? [], [product.variants]);
   const sizes = useMemo(
@@ -29,6 +32,28 @@ export function VariantSelector({ product }: { product: ProductWithRelations }) 
     null;
 
   const price = selected?.price ?? product.price;
+  const cart = useCart();
+  const [added, setAdded] = useState(false);
+  const img = primaryImage(product);
+
+  function addToBag() {
+    if (!selected) return;
+    cart.add({
+      variantId: selected.id,
+      productId: product.id,
+      slug: product.slug,
+      title: product.title,
+      variantTitle:
+        (selected.title ?? [selected.size, selected.color].filter(Boolean).join(" / ")) || null,
+      sku: selected.sku,
+      price: selected.price,
+      currency: product.currency,
+      imageUrl: img?.url ?? null,
+      quantity: 1,
+    });
+    setAdded(true);
+    setTimeout(() => setAdded(false), 1500);
+  }
 
   return (
     <div className="space-y-6">
@@ -42,11 +67,11 @@ export function VariantSelector({ product }: { product: ProductWithRelations }) 
       <div>
         <button
           type="button"
-          disabled
-          title="Cart & checkout arrive in Session 05"
-          className="w-full cursor-not-allowed rounded-sm bg-accent-sun px-6 py-4 font-mono text-xs tracking-widest text-surface uppercase opacity-70"
+          onClick={addToBag}
+          disabled={!selected}
+          className="w-full rounded-sm bg-accent-sun px-6 py-4 font-mono text-xs tracking-widest text-surface uppercase transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Add to bag — coming soon
+          {added ? "Added to bag ✓" : "Add to bag"}
         </button>
         {selected?.sku && (
           <p className="mt-3 font-mono text-caption text-ink/40">SKU {selected.sku}</p>

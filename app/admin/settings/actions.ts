@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireOps } from "@/lib/auth";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export async function updateSettings(formData: FormData) {
   await requireOps();

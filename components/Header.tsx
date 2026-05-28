@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Container } from "@/components/Container";
 import { Logo } from "@/components/Logo";
+import { CartIcon } from "@/components/cart/CartIcon";
 
 const nav = [
   { href: "/shop", label: "Shop" },
@@ -24,6 +25,7 @@ export function Header() {
               {item.label}
             </Link>
           ))}
+          <CartIcon />
         </nav>
       </Container>
     </header>
