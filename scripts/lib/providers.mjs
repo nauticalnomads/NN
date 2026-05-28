@@ -5,11 +5,19 @@
 const PRINTFUL_BASE = "https://api.printful.com";
 const PRINTIFY_BASE = "https://api.printify.com/v1";
 
+// Printful headers — auth + (when present) the store-id header required for
+// accounts with multiple stores.
+export function printfulHeaders() {
+  const h = { Authorization: `Bearer ${process.env.PRINTFUL_API_KEY ?? ""}` };
+  if (process.env.PRINTFUL_STORE_ID) h["X-PF-Store-Id"] = process.env.PRINTFUL_STORE_ID;
+  return h;
+}
+
 export async function printfulVariantCost(printfulVariantId) {
   const key = process.env.PRINTFUL_API_KEY;
   if (!key || !printfulVariantId) return null;
   const res = await fetch(`${PRINTFUL_BASE}/products/variant/${encodeURIComponent(printfulVariantId)}`, {
-    headers: { Authorization: `Bearer ${key}` },
+    headers: printfulHeaders(),
   });
   if (!res.ok) return null;
   const json = await res.json();

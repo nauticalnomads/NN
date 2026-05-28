@@ -1,34 +1,44 @@
-// Shopify Admin API client — uses the OAuth client credentials grant.
-// Static Admin API tokens were deprecated in January 2026; apps now authenticate
-// server-to-server with their Client ID + Secret and receive a short-lived token.
+// Shopify Admin API client.
 //
-// Env:
-//   SHOPIFY_STORE_DOMAIN  — e.g. "nauticalnomads.myshopify.com" (no protocol)
-//   SHOPIFY_CLIENT_ID
-//   SHOPIFY_CLIENT_SECRET
-//   SHOPIFY_API_VERSION   — optional, defaults to "2026-01"
+// Two auth paths supported (the first one whose env is set wins):
+//
+//   1. SHOPIFY_ADMIN_TOKEN — a Custom App Admin API access token (e.g. atkn_…
+//      or shpat_…). Used directly as the X-Shopify-Access-Token header. This
+//      is the simplest path when the owner already has a token in hand.
+//
+//   2. SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET — OAuth client credentials
+//      grant, exchanged at run time for a short-lived token. The recommended
+//      path for apps without a stored access token.
+//
+// Env (always required):
+//   SHOPIFY_STORE_DOMAIN   — e.g. "nautical-nomads-2.myshopify.com" (no protocol)
+//   SHOPIFY_API_VERSION    — optional, defaults to "2026-01"
 
 const API_VERSION = process.env.SHOPIFY_API_VERSION || "2026-01";
 
 let cached = { token: null, expiresAt: 0 };
 
-function requireEnv() {
+function requireDomain() {
   const domain = process.env.SHOPIFY_STORE_DOMAIN;
-  const id = process.env.SHOPIFY_CLIENT_ID;
-  const secret = process.env.SHOPIFY_CLIENT_SECRET;
-  if (!domain || !id || !secret) {
-    throw new Error(
-      "Missing Shopify creds. Set SHOPIFY_STORE_DOMAIN, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET.",
-    );
-  }
-  return { domain, id, secret };
+  if (!domain) throw new Error("Missing Shopify env: SHOPIFY_STORE_DOMAIN");
+  return domain;
 }
 
-// OAuth client credentials grant — exchanges client_id + client_secret for an
-// access token. Cached in-process for ~50 minutes (Shopify tokens are ~1h).
 export async function getAccessToken() {
+  // Path 1: direct access token — preferred when present, no network call.
+  const direct = process.env.SHOPIFY_ADMIN_TOKEN;
+  if (direct) return direct;
+
+  // Path 2: OAuth client credentials grant (cached ~50 min).
   if (cached.token && Date.now() < cached.expiresAt) return cached.token;
-  const { domain, id, secret } = requireEnv();
+  const domain = requireDomain();
+  const id = process.env.SHOPIFY_CLIENT_ID;
+  const secret = process.env.SHOPIFY_CLIENT_SECRET;
+  if (!id || !secret) {
+    throw new Error(
+      "Missing Shopify auth. Set SHOPIFY_ADMIN_TOKEN, or SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET.",
+    );
+  }
 
   const res = await fetch(`https://${domain}/admin/oauth/access_token`, {
     method: "POST",
@@ -40,19 +50,17 @@ export async function getAccessToken() {
     }),
   });
   if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(`Shopify auth failed (${res.status}): ${detail}`);
+    throw new Error(`Shopify auth failed (${res.status}): ${await res.text()}`);
   }
   const data = await res.json();
   if (!data.access_token) throw new Error("Shopify auth: no access_token in response");
-
   cached = { token: data.access_token, expiresAt: Date.now() + 50 * 60 * 1000 };
   return data.access_token;
 }
 
 // GraphQL Admin API call (preferred — REST is being sunset).
 export async function shopifyGraphQL(query, variables = {}) {
-  const { domain } = requireEnv();
+  const domain = requireDomain();
   const token = await getAccessToken();
   const res = await fetch(`https://${domain}/admin/api/${API_VERSION}/graphql.json`, {
     method: "POST",

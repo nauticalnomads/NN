@@ -23,6 +23,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { shopifyGraphQL, iterateProducts as _iter } from "./lib/shopify.mjs";
+import { printfulHeaders } from "./lib/providers.mjs";
 
 // ── args ─────────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -115,7 +116,7 @@ async function loadPrintfulStoreProducts() {
   let offset = 0;
   while (true) {
     const res = await fetch(`https://api.printful.com/store/products?limit=100&offset=${offset}`, {
-      headers: { Authorization: `Bearer ${key}` },
+      headers: printfulHeaders(),
     });
     if (!res.ok) {
       console.warn(`  Printful store list error ${res.status}: ${await res.text()}`);
@@ -136,7 +137,7 @@ async function printfulMatch(shopifyLegacyId) {
   // Fetch sync_variants with their catalog variant_ids and costs.
   const key = process.env.PRINTFUL_API_KEY;
   const det = await fetch(`https://api.printful.com/store/products/${hit.id}`, {
-    headers: { Authorization: `Bearer ${key}` },
+    headers: printfulHeaders(),
   });
   if (!det.ok) return { storeProduct: hit, sync: null };
   const dj = await det.json();
