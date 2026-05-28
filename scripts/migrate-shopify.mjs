@@ -200,8 +200,18 @@ function validateProduct(p, normalized) {
     issues.push("description thin or missing");
   if ((normalized.images?.length ?? 0) === 0) issues.push("no images");
   if (!normalized.variants?.length) issues.push("no variants");
+  // Provider mapping is a product-level property. For printful/printify we
+  // also need per-variant provider_variant_id to fulfil. JetPrint products
+  // without per-variant IDs are still flaggable as they'll need manual fulfil.
+  if (!normalized.provider) {
+    issues.push("no provider mapping");
+  } else if (normalized.provider !== "jetprint") {
+    for (const v of normalized.variants ?? []) {
+      if (!v.provider_variant_id)
+        issues.push(`variant ${v.sku || "?"} has no provider_variant_id`);
+    }
+  }
   for (const v of normalized.variants ?? []) {
-    if (!v.provider) issues.push(`variant ${v.sku || "?"} has no provider mapping`);
     if (!(v.price > 0)) issues.push(`variant ${v.sku || "?"} has zero/odd price`);
   }
   if (
