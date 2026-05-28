@@ -111,7 +111,11 @@ function cleanAlt(rawAlt, fallbackTitle) {
 
 // New SKU scheme: NN-{CAT}-{seq:04}-{size?-color?}
 function buildSku(product, variant, seq) {
-  const cat = (product.productType || "gen").replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase() || "GEN";
+  const cat =
+    (product.productType || "gen")
+      .replace(/[^a-zA-Z]/g, "")
+      .slice(0, 3)
+      .toUpperCase() || "GEN";
   const base = `NN-${cat}-${String(seq).padStart(4, "0")}`;
   const opts = (variant.selectedOptions || [])
     .map((o) => slugify(o.value).slice(0, 6))
@@ -152,12 +156,7 @@ function detectMapping(shopifyProduct, shopifyVariant, pfMap, pyMap, jpMap) {
   const jp = jpMap.get(productLegacy);
   if (jp) {
     // JetPrint variant + cost field names vary across API versions.
-    const variants =
-      jp.variants ??
-      jp.product_variants ??
-      jp.skus ??
-      jp.product?.variants ??
-      [];
+    const variants = jp.variants ?? jp.product_variants ?? jp.skus ?? jp.product?.variants ?? [];
     const jv =
       variants.find(
         (v) =>
@@ -170,8 +169,7 @@ function detectMapping(shopifyProduct, shopifyVariant, pfMap, pyMap, jpMap) {
       provider_product_id: String(jp.id ?? jp.product_id ?? jp.jetprint_product_id ?? "") || null,
       provider_variant_id:
         String(jv?.id ?? jv?.variant_id ?? jv?.jetprint_variant_id ?? "") || null,
-      base_cost_cents:
-        typeof cost === "number" && cost > 1 ? cost : null, // cents
+      base_cost_cents: typeof cost === "number" && cost > 1 ? cost : null, // cents
       base_cost_units: typeof cost === "number" && cost <= 1 ? null : null,
     };
   }
@@ -183,8 +181,8 @@ function detectMapping(shopifyProduct, shopifyVariant, pfMap, pyMap, jpMap) {
   if (skuMatch) {
     return {
       provider: "printful",
-      provider_product_id: skuMatch[1],         // sync_product_id (informational)
-      provider_variant_id: skuMatch[2],         // catalog variant_id ⇒ what fulfilment needs
+      provider_product_id: skuMatch[1], // sync_product_id (informational)
+      provider_variant_id: skuMatch[2], // catalog variant_id ⇒ what fulfilment needs
     };
   }
   // 5) JetPrint fallback by vendor (no API match — still mark as jetprint so
@@ -260,7 +258,10 @@ async function normalise(p, seq, sb, pfMap, pyMap, jpMap) {
     //   JetPrint  → variant.cost is typically in cents too (when API returns it)
     //   Printful  → catalog lookup, returns major units (£)
     let baseCost = null;
-    if ((m.provider === "printify" || m.provider === "jetprint") && typeof m.base_cost_cents === "number") {
+    if (
+      (m.provider === "printify" || m.provider === "jetprint") &&
+      typeof m.base_cost_cents === "number"
+    ) {
       baseCost = m.base_cost_cents / 100;
     } else if (m.provider === "printful" && !SKIP_COSTS && m.provider_variant_id) {
       baseCost = await printfulCatalogCost(m.provider_variant_id);
@@ -288,9 +289,7 @@ async function normalise(p, seq, sb, pfMap, pyMap, jpMap) {
   let i = 0;
   for (const img of imageNodes) {
     const alt = cleanAlt(img.altText, p.title);
-    const uploaded = sb
-      ? await uploadImage(sb, slug, i, img.url, alt)
-      : { url: img.url, alt };
+    const uploaded = sb ? await uploadImage(sb, slug, i, img.url, alt) : { url: img.url, alt };
     images.push({ ...uploaded, sort_order: i, is_primary: i === 0 });
     i++;
   }
@@ -424,9 +423,9 @@ async function upsertProduct(sb, normalized, autoPublish) {
   // Images: replace (Shopify is source of truth, easier than diffing).
   await sb.from("product_images").delete().eq("product_id", productId);
   if (normalized.images.length) {
-    await sb.from("product_images").insert(
-      normalized.images.map((im) => ({ ...im, product_id: productId })),
-    );
+    await sb
+      .from("product_images")
+      .insert(normalized.images.map((im) => ({ ...im, product_id: productId })));
   }
   return productId;
 }
@@ -446,7 +445,9 @@ async function main() {
   process.stdout.write("\n");
   console.log(`  Printful sync products: ${pfMap.size}`);
   console.log(`  Printify products:      ${pyMap.size}`);
-  console.log(`  JetPrint products:      ${jpMap.size}${jpMap.size === 0 ? "  (no API key or no products)" : ""}`);
+  console.log(
+    `  JetPrint products:      ${jpMap.size}${jpMap.size === 0 ? "  (no API key or no products)" : ""}`,
+  );
   console.log();
 
   const report = {
@@ -515,7 +516,9 @@ async function main() {
   ];
   // Group flags by reason for quick scanning.
   for (const f of report.flags) {
-    lines.push(`### ${f.title} — \`${f.slug}\`  *${f.provider ?? "unmapped"}, vendor=${f.vendor || "—"}*`);
+    lines.push(
+      `### ${f.title} — \`${f.slug}\`  *${f.provider ?? "unmapped"}, vendor=${f.vendor || "—"}*`,
+    );
     for (const i of f.issues) lines.push(`- ${i}`);
     lines.push("");
   }

@@ -32,7 +32,10 @@ const opt = (name, fallback) => {
   return i >= 0 && args[i + 1] && !args[i + 1].startsWith("--") ? args[i + 1] : fallback;
 };
 const LIMIT = Math.max(1, Math.min(10, Number(opt("--limit", 3)) || 3));
-const HANDLES = (opt("--handles", "") || "").split(",").map((s) => s.trim()).filter(Boolean);
+const HANDLES = (opt("--handles", "") || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 const OUT = opt("--out", null);
 
 // ── Shopify: rich sample query with ALL metafields ───────────────────────────
@@ -49,11 +52,27 @@ const SAMPLE_QUERY = /* GraphQL */ `
         tags
         status
         descriptionHtml
-        seo { title description }
-        featuredImage { url altText }
-        images(first: 20) { nodes { url altText } }
+        seo {
+          title
+          description
+        }
+        featuredImage {
+          url
+          altText
+        }
+        images(first: 20) {
+          nodes {
+            url
+            altText
+          }
+        }
         metafields(first: 50) {
-          nodes { namespace key type value }
+          nodes {
+            namespace
+            key
+            type
+            value
+          }
         }
         variants(first: 100) {
           nodes {
@@ -63,9 +82,17 @@ const SAMPLE_QUERY = /* GraphQL */ `
             title
             price
             compareAtPrice
-            selectedOptions { name value }
+            selectedOptions {
+              name
+              value
+            }
             metafields(first: 30) {
-              nodes { namespace key type value }
+              nodes {
+                namespace
+                key
+                type
+                value
+              }
             }
           }
         }
@@ -86,10 +113,28 @@ const HANDLE_QUERY = /* GraphQL */ `
       tags
       status
       descriptionHtml
-      seo { title description }
-      featuredImage { url altText }
-      images(first: 20) { nodes { url altText } }
-      metafields(first: 50) { nodes { namespace key type value } }
+      seo {
+        title
+        description
+      }
+      featuredImage {
+        url
+        altText
+      }
+      images(first: 20) {
+        nodes {
+          url
+          altText
+        }
+      }
+      metafields(first: 50) {
+        nodes {
+          namespace
+          key
+          type
+          value
+        }
+      }
       variants(first: 100) {
         nodes {
           id
@@ -98,8 +143,18 @@ const HANDLE_QUERY = /* GraphQL */ `
           title
           price
           compareAtPrice
-          selectedOptions { name value }
-          metafields(first: 30) { nodes { namespace key type value } }
+          selectedOptions {
+            name
+            value
+          }
+          metafields(first: 30) {
+            nodes {
+              namespace
+              key
+              type
+              value
+            }
+          }
         }
       }
     }
@@ -158,9 +213,12 @@ async function loadPrintifyProducts() {
   const all = [];
   let page = 1;
   while (true) {
-    const res = await fetch(`https://api.printify.com/v1/shops/${shopId}/products.json?limit=100&page=${page}`, {
-      headers: { Authorization: `Bearer ${key}` },
-    });
+    const res = await fetch(
+      `https://api.printify.com/v1/shops/${shopId}/products.json?limit=100&page=${page}`,
+      {
+        headers: { Authorization: `Bearer ${key}` },
+      },
+    );
     if (!res.ok) {
       console.warn(`  Printify list error ${res.status}: ${await res.text()}`);
       break;
@@ -174,8 +232,8 @@ async function loadPrintifyProducts() {
   return (printifyCache = all);
 }
 function printifyMatch(shopifyLegacyId) {
-  return loadPrintifyProducts().then((list) =>
-    list.find((p) => String(p?.external?.id ?? "") === String(shopifyLegacyId)) ?? null,
+  return loadPrintifyProducts().then(
+    (list) => list.find((p) => String(p?.external?.id ?? "") === String(shopifyLegacyId)) ?? null,
   );
 }
 
@@ -200,11 +258,19 @@ async function renderProduct(p) {
   lines.push(`---\n\n## ${p.title}  \`${p.handle}\``);
   lines.push("");
   lines.push(`- Shopify gid: \`${p.id}\``);
-  lines.push(`- Shopify numeric id: \`${p.legacyResourceId}\`  ← what the POD apps use as external_id`);
-  lines.push(`- Vendor: \`${p.vendor ?? "—"}\`  ·  Type: \`${p.productType ?? "—"}\`  ·  Status: \`${p.status}\``);
+  lines.push(
+    `- Shopify numeric id: \`${p.legacyResourceId}\`  ← what the POD apps use as external_id`,
+  );
+  lines.push(
+    `- Vendor: \`${p.vendor ?? "—"}\`  ·  Type: \`${p.productType ?? "—"}\`  ·  Status: \`${p.status}\``,
+  );
   lines.push(`- Tags: ${(p.tags ?? []).map((t) => "`" + t + "`").join(", ") || "—"}`);
-  lines.push(`- SEO title: \`${p.seo?.title ?? "—"}\`  ·  SEO desc: \`${(p.seo?.description ?? "—").slice(0, 80)}\``);
-  lines.push(`- Description (first 200): \`${(p.descriptionHtml ?? "").replace(/\s+/g, " ").slice(0, 200)}\``);
+  lines.push(
+    `- SEO title: \`${p.seo?.title ?? "—"}\`  ·  SEO desc: \`${(p.seo?.description ?? "—").slice(0, 80)}\``,
+  );
+  lines.push(
+    `- Description (first 200): \`${(p.descriptionHtml ?? "").replace(/\s+/g, " ").slice(0, 200)}\``,
+  );
   lines.push("");
 
   lines.push(`**Images (Shopify CDN — these are the ones the migration will use):**`);
@@ -213,20 +279,32 @@ async function renderProduct(p) {
   }
   lines.push("");
 
-  lines.push(`**Product-level metafields (all namespaces — look for app--printful / app--printify / printful / printify):**`);
+  lines.push(
+    `**Product-level metafields (all namespaces — look for app--printful / app--printify / printful / printify):**`,
+  );
   const pm = p.metafields?.nodes ?? [];
   if (pm.length === 0) lines.push("- (none)");
-  else for (const m of pm) lines.push(`- \`${m.namespace}.${m.key}\` (${m.type}) = \`${(m.value ?? "").slice(0, 200)}\``);
+  else
+    for (const m of pm)
+      lines.push(
+        `- \`${m.namespace}.${m.key}\` (${m.type}) = \`${(m.value ?? "").slice(0, 200)}\``,
+      );
   lines.push("");
 
   lines.push(`**Variants (${p.variants?.nodes?.length ?? 0}):**`);
   for (const v of p.variants?.nodes ?? []) {
-    lines.push(`- \`${v.sku || "(no sku)"}\`  ·  ${v.title}  ·  £${v.price}${v.compareAtPrice ? ` (compare £${v.compareAtPrice})` : ""}`);
+    lines.push(
+      `- \`${v.sku || "(no sku)"}\`  ·  ${v.title}  ·  £${v.price}${v.compareAtPrice ? ` (compare £${v.compareAtPrice})` : ""}`,
+    );
     lines.push(`  - gid: \`${v.id}\`  ·  numeric id: \`${v.legacyResourceId}\``);
-    lines.push(`  - options: ${(v.selectedOptions ?? []).map((o) => `${o.name}=${o.value}`).join(", ") || "—"}`);
+    lines.push(
+      `  - options: ${(v.selectedOptions ?? []).map((o) => `${o.name}=${o.value}`).join(", ") || "—"}`,
+    );
     const vm = v.metafields?.nodes ?? [];
     if (vm.length === 0) lines.push(`  - metafields: (none)`);
-    else for (const m of vm) lines.push(`  - mf: \`${m.namespace}.${m.key}\` = \`${(m.value ?? "").slice(0, 120)}\``);
+    else
+      for (const m of vm)
+        lines.push(`  - mf: \`${m.namespace}.${m.key}\` = \`${(m.value ?? "").slice(0, 120)}\``);
   }
   lines.push("");
 
@@ -234,7 +312,9 @@ async function renderProduct(p) {
   const pf = await printfulMatch(p.legacyResourceId);
   if (pf) {
     lines.push(`### ✓ Printful match (by external_id = \`${p.legacyResourceId}\`)`);
-    lines.push(`- Printful sync_product id: **\`${pf.storeProduct.id}\`**  ← this is provider_product_id`);
+    lines.push(
+      `- Printful sync_product id: **\`${pf.storeProduct.id}\`**  ← this is provider_product_id`,
+    );
     lines.push(`- Printful name: \`${pf.storeProduct.name}\` (NOT used — we keep Shopify title)`);
     if (pf.syncVariants?.length) {
       lines.push(`- Sync variants:`);
@@ -284,12 +364,19 @@ async function main() {
   // Env diagnostics
   push(`## Environment`);
   push(`- Shopify store: \`${process.env.SHOPIFY_STORE_DOMAIN || "(missing)"}\``);
-  push(`- Printful key: ${process.env.PRINTFUL_API_KEY ? "present" : "(missing — will skip Printful lookups)"}`);
-  push(`- Printify key: ${process.env.PRINTIFY_API_KEY ? "present" : "(missing — will skip Printify lookups)"}`);
+  push(
+    `- Printful key: ${process.env.PRINTFUL_API_KEY ? "present" : "(missing — will skip Printful lookups)"}`,
+  );
+  push(
+    `- Printify key: ${process.env.PRINTIFY_API_KEY ? "present" : "(missing — will skip Printify lookups)"}`,
+  );
   push(`- Printify shop id: ${process.env.PRINTIFY_SHOP_ID || "(missing)"}`);
   if (process.env.PRINTIFY_API_KEY && !process.env.PRINTIFY_SHOP_ID) {
     const shops = await listPrintifyShops();
-    if (shops) push(`\n${fence("Printify shops on this account (pick the Shopify-connected one for PRINTIFY_SHOP_ID)", shops)}`);
+    if (shops)
+      push(
+        `\n${fence("Printify shops on this account (pick the Shopify-connected one for PRINTIFY_SHOP_ID)", shops)}`,
+      );
   }
   push("");
 

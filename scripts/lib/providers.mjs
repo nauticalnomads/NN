@@ -21,9 +21,12 @@ export async function printfulCatalogCost(catalogVariantId) {
   if (!catalogVariantId) return null;
   if (printfulCostCache.has(catalogVariantId)) return printfulCostCache.get(catalogVariantId);
   try {
-    const res = await fetch(`${PRINTFUL_BASE}/products/variant/${encodeURIComponent(catalogVariantId)}`, {
-      headers: printfulHeaders(),
-    });
+    const res = await fetch(
+      `${PRINTFUL_BASE}/products/variant/${encodeURIComponent(catalogVariantId)}`,
+      {
+        headers: printfulHeaders(),
+      },
+    );
     if (!res.ok) {
       printfulCostCache.set(catalogVariantId, null);
       return null;
@@ -66,7 +69,9 @@ export async function buildPrintfulMap(progress = () => {}) {
   for (let i = 0; i < list.length; i++) {
     const p = list[i];
     try {
-      const r = await fetch(`${PRINTFUL_BASE}/sync/products/${p.id}`, { headers: printfulHeaders() });
+      const r = await fetch(`${PRINTFUL_BASE}/sync/products/${p.id}`, {
+        headers: printfulHeaders(),
+      });
       if (!r.ok) continue;
       const dj = await r.json();
       const syncProduct = dj?.result?.sync_product;

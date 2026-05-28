@@ -81,7 +81,10 @@ export async function shopifyGraphQL(query, variables = {}) {
 const PRODUCTS_QUERY = /* GraphQL */ `
   query Products($cursor: String) {
     products(first: 50, after: $cursor) {
-      pageInfo { hasNextPage endCursor }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
       nodes {
         id
         title
@@ -91,11 +94,26 @@ const PRODUCTS_QUERY = /* GraphQL */ `
         tags
         status
         vendor
-        seo { title description }
-        featuredImage { url altText }
-        images(first: 20) { nodes { url altText } }
-        provider:           metafield(namespace: "nn", key: "provider")            { value }
-        provider_product_id: metafield(namespace: "nn", key: "provider_product_id") { value }
+        seo {
+          title
+          description
+        }
+        featuredImage {
+          url
+          altText
+        }
+        images(first: 20) {
+          nodes {
+            url
+            altText
+          }
+        }
+        provider: metafield(namespace: "nn", key: "provider") {
+          value
+        }
+        provider_product_id: metafield(namespace: "nn", key: "provider_product_id") {
+          value
+        }
         variants(first: 100) {
           nodes {
             id
@@ -103,9 +121,16 @@ const PRODUCTS_QUERY = /* GraphQL */ `
             title
             price
             compareAtPrice
-            selectedOptions { name value }
-            provider:            metafield(namespace: "nn", key: "provider")            { value }
-            provider_variant_id: metafield(namespace: "nn", key: "provider_variant_id") { value }
+            selectedOptions {
+              name
+              value
+            }
+            provider: metafield(namespace: "nn", key: "provider") {
+              value
+            }
+            provider_variant_id: metafield(namespace: "nn", key: "provider_variant_id") {
+              value
+            }
           }
         }
       }

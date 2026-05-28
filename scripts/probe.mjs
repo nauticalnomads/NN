@@ -1,5 +1,5 @@
 const dim = (s) => "\x1b[2m" + s + "\x1b[0m";
-const ok  = (s) => "\x1b[32m" + s + "\x1b[0m";
+const ok = (s) => "\x1b[32m" + s + "\x1b[0m";
 const bad = (s) => "\x1b[31m" + s + "\x1b[0m";
 
 // Try Shopify subdomain variants — OAuth endpoint returns 404 when the shop
@@ -47,10 +47,14 @@ try {
   for (const [k, v] of r.headers.entries()) {
     if (/shop|x-shopid|x-shardid|powered/i.test(k)) console.log("   ", k, "=", v);
   }
-  const body = await fetch("https://nauticalnomads.com").then((x) => x.text()).catch(() => "");
+  const body = await fetch("https://nauticalnomads.com")
+    .then((x) => x.text())
+    .catch(() => "");
   const m = body.match(/([a-z0-9-]+)\.myshopify\.com/i);
   if (m) console.log("   homepage references:", ok(m[0]));
-} catch (e) { console.log("   ", bad(e.message)); }
+} catch (e) {
+  console.log("   ", bad(e.message));
+}
 
 // Printful — new accounts need store_id; list stores first.
 console.log("\nPrintful stores:");
@@ -60,8 +64,11 @@ try {
   });
   const j = await r.json();
   if (r.ok) {
-    for (const s of j.result ?? []) console.log("   id=", s.id, " name=", dim(s.name), " platform=", dim(s.type));
+    for (const s of j.result ?? [])
+      console.log("   id=", s.id, " name=", dim(s.name), " platform=", dim(s.type));
   } else {
     console.log("   ", bad("FAILED"), r.status, dim(JSON.stringify(j).slice(0, 300)));
   }
-} catch (e) { console.log("   ", bad(e.message)); }
+} catch (e) {
+  console.log("   ", bad(e.message));
+}
