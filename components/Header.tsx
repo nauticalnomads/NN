@@ -3,8 +3,8 @@ import { Container } from "@/components/Container";
 import { Logo } from "@/components/Logo";
 
 const nav = [
-  { href: "/", label: "Shop" },
-  { href: "/styleguide", label: "Styleguide" },
+  { href: "/shop", label: "Shop" },
+  { href: "/about", label: "About" },
 ];
 
 export function Header() {

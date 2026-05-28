@@ -127,7 +127,51 @@ SQL I provided in chat against your Supabase project (SQL Editor), then run `see
 with your email after you've signed up. After that, `/api/health` should report
 `{ ok: true, schema: "migrated" }`.
 
+---
+
+## Session 04 — Storefront ✅ (code complete; fills in once products exist)
+
+A fast, SEO-maximised, brand-accurate storefront reading live from Supabase, with graceful
+empty-states until the Session 03 migration lands.
+
+### Built
+
+- **Home** — editorial hero, collections strip, featured grid (reads `getFeaturedProducts`).
+- **Shop** `/shop` — product grid with sort (featured/newest/price) + pagination.
+- **Product** `/products/[slug]` — gallery, **functional variant selector** (size/colour → live
+  price + SKU), brand-voice description, `generateStaticParams` + `generateMetadata`.
+- **Collections** `/collections/[slug]` — grid + per-collection SEO.
+- **Static** — About, Contact, Shipping & Returns (**import VAT/duty note** for international),
+  Size guide, and a styled **404** ("You drifted off the chart").
+- **SEO (§5)** — env-driven `metadataBase`/canonicals, OG + Twitter tags, editable SEO
+  title/description per product & collection, **JSON-LD** (Organization site-wide, Product +
+  BreadcrumbList on PDP, Breadcrumb on collections), `sitemap.xml`, `robots.txt`, image alt text
+  with title fallback.
+- `next/image` configured for Supabase Storage + Printful/Printify/Shopify CDNs.
+- Shared libs: `lib/site.ts`, `lib/queries.ts` (resilient — empty/null on any failure),
+  `lib/format.ts`, `lib/structured-data.ts`.
+
+### Verified (local `next build` + `next start`, no Supabase env = empty-state path)
+
+- 13 routes build; static pages 200; unknown product/collection → **404**; `sitemap.xml` +
+  `robots.txt` serve; home shows hero + empty-catalogue message; import-VAT note present.
+- typecheck / lint / format all clean.
+
+### Decisions / notes
+
+- **Add-to-bag is intentionally disabled** on the PDP — variant selection is fully functional, but
+  cart + checkout are Session 05. Labelled "coming soon" so it's honest, not broken.
+- **Domain via `NEXT_PUBLIC_SITE_URL`** (defaults to `https://nautical-nomads.com`). Set this in
+  Cloudflare now; the later `nauticalnomads.com` cutover is then a one-line env change.
+- Storefront reads through the anon client + RLS (published-only). Couldn't test against your live
+  Supabase from the sandbox (no egress); empty-state path verified instead.
+
+### ⚠️ Owner action
+
+- Set **`NEXT_PUBLIC_SITE_URL`** in Cloudflare (and locally) so canonicals/sitemap/OG use the right
+  host.
+
 ### Next session
 
-**Session 03 — Shopify migration** (Admin API → clean → map to provider → import), or **Session 04
-— Storefront**. 03 needs your Shopify Admin API token + Printful/Printify keys.
+**Session 03 — Shopify migration** (Admin API → clean → map to provider → import). Needs your
+Shopify Admin API token + Printful/Printify keys. Then **Session 08 — Roles & Auth** (testable).

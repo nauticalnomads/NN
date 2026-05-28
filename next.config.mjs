@@ -2,8 +2,13 @@
 const nextConfig = {
   reactStrictMode: true,
   images: {
-    // POD CDNs + Supabase Storage will be added as products are migrated (Session 03).
-    remotePatterns: [],
+    // Supabase Storage + POD CDNs (images come from migration, Session 03).
+    remotePatterns: [
+      { protocol: "https", hostname: "*.supabase.co", pathname: "/storage/v1/object/public/**" },
+      { protocol: "https", hostname: "files.cdn.printful.com" },
+      { protocol: "https", hostname: "images-api.printify.com" },
+      { protocol: "https", hostname: "cdn.shopify.com" },
+    ],
   },
 };
 

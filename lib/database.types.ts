@@ -27,10 +27,12 @@ export type NotificationType = "fulfilment_failed" | "refund_requested" | "dispu
 
 type Timestamps = { created_at: string; updated_at: string };
 // Row = full shape; Insert = required cols only (defaults optional); Update = all optional.
+// Relationships kept empty — embedded selects are cast at the call site.
 type Table<Row, Required extends keyof Row> = {
   Row: Row;
   Insert: Pick<Row, Required> & Partial<Omit<Row, Required>>;
   Update: Partial<Row>;
+  Relationships: [];
 };
 
 export interface UserRow extends Timestamps {
