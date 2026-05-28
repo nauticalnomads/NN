@@ -207,8 +207,7 @@ function validateProduct(p, normalized) {
     issues.push("no provider mapping");
   } else if (normalized.provider !== "jetprint") {
     for (const v of normalized.variants ?? []) {
-      if (!v.provider_variant_id)
-        issues.push(`variant ${v.sku || "?"} has no provider_variant_id`);
+      if (!v.provider_variant_id) issues.push(`variant ${v.sku || "?"} has no provider_variant_id`);
     }
   }
   for (const v of normalized.variants ?? []) {

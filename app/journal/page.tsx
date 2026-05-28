@@ -53,7 +53,9 @@ export default async function Journal() {
           </li>
         ))}
         {posts.length === 0 && (
-          <p className="font-body text-body text-ink/50">No posts yet. The first one&apos;s coming.</p>
+          <p className="font-body text-body text-ink/50">
+            No posts yet. The first one&apos;s coming.
+          </p>
         )}
       </ul>
     </Container>
