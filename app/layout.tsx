@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { organizationLd } from "@/lib/structured-data";
-import { site } from "@/lib/site";
+import { allowIndexing, site } from "@/lib/site";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -14,6 +14,11 @@ export const metadata: Metadata = {
     template: `%s · ${site.name}`,
   },
   description: site.description,
+  // Pre-launch default: noindex/nofollow. Flip NEXT_PUBLIC_ALLOW_INDEXING=true
+  // at cutover. Belt + braces with robots.txt and the empty sitemap.
+  robots: allowIndexing
+    ? { index: true, follow: true }
+    : { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } },
   openGraph: {
     type: "website",
     siteName: site.name,

@@ -1,12 +1,14 @@
 import type { MetadataRoute } from "next";
-import { absoluteUrl } from "@/lib/site";
+import { absoluteUrl, allowIndexing } from "@/lib/site";
 import { getProductSlugs, getCollections } from "@/lib/queries";
 
 export const revalidate = 3600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [slugs, collections] = await Promise.all([getProductSlugs(), getCollections()]);
+  // Pre-launch: serve an empty sitemap (paired with robots disallow).
+  if (!allowIndexing) return [];
 
+  const [slugs, collections] = await Promise.all([getProductSlugs(), getCollections()]);
   const staticPaths = ["/", "/shop", "/about", "/contact", "/shipping-returns", "/size-guide"];
 
   return [
