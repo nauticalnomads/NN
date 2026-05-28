@@ -2,6 +2,15 @@
 /**
  * Nautical Nomads — Shopify → Supabase migration (Session 03).
  *
+ * CONTENT SOURCE RULE — non-negotiable:
+ *   - Shopify is the SINGLE SOURCE OF TRUTH for customer-facing content:
+ *     title, description, SEO, images, option values, SKU.
+ *   - Printful / Printify are used ONLY to derive provider mapping
+ *     (provider, provider_product_id, provider_variant_id) and base_cost
+ *     (for profit reporting). Their titles, descriptions, and images must
+ *     NEVER overwrite the Shopify content — half the images and all the text
+ *     in Shopify have been edited post-import and have diverged from POD.
+ *
  * Pulls all products from the Shopify Admin API (GraphQL), normalises into the
  * new schema, generates clean SKUs, maps each variant to its POD provider via
  * Shopify metafields (namespace `nn`), pulls base_cost from Printful/Printify,
