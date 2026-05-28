@@ -32,6 +32,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# migration / inspection outputs (regenerated; contain live catalogue data)
+/inspection-report.md
+/migration-report.md
+/shopify-overrides.json
+
 # misc
 .DS_Store
 *.pem
