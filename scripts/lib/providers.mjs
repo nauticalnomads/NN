@@ -1,55 +1,163 @@
-// Thin POD API wrappers used by the migration to fetch base_cost per variant
-// and to verify provider/variant IDs exist. Either provider can be absent —
-// callers should treat missing creds as "no base cost available, flag it".
+// POD-provider helpers used by the Shopify migration. CONTENT-SOURCE RULE: these
+// helpers are used ONLY to derive provider mapping (which provider, IDs) and
+// base_cost. They never produce titles, descriptions, images, or anything else
+// that touches displayed content — that all comes from Shopify.
 
 const PRINTFUL_BASE = "https://api.printful.com";
 const PRINTIFY_BASE = "https://api.printify.com/v1";
 
-// Printful headers — auth + (when present) the store-id header required for
-// accounts with multiple stores.
+// ── Printful ─────────────────────────────────────────────────────────────────
 export function printfulHeaders() {
   const h = { Authorization: `Bearer ${process.env.PRINTFUL_API_KEY ?? ""}` };
   if (process.env.PRINTFUL_STORE_ID) h["X-PF-Store-Id"] = process.env.PRINTFUL_STORE_ID;
   return h;
 }
 
-export async function printfulVariantCost(printfulVariantId) {
-  const key = process.env.PRINTFUL_API_KEY;
-  if (!key || !printfulVariantId) return null;
-  const res = await fetch(`${PRINTFUL_BASE}/products/variant/${encodeURIComponent(printfulVariantId)}`, {
-    headers: printfulHeaders(),
-  });
-  if (!res.ok) return null;
-  const json = await res.json();
-  // Printful price is the catalogue price you pay them, as a numeric string.
-  const price = json?.result?.variant?.price ?? json?.result?.price;
-  const n = typeof price === "string" ? Number(price) : price;
-  return Number.isFinite(n) ? n : null;
-}
+// Catalog cost cache — many sync_variants share the same catalog variant_id,
+// so we look each one up at most once across the whole migration.
+const printfulCostCache = new Map();
 
-export async function printifyVariantCost(shopId, printifyProductId, printifyVariantId) {
-  const key = process.env.PRINTIFY_API_KEY;
-  if (!key || !shopId || !printifyProductId || !printifyVariantId) return null;
-  const res = await fetch(`${PRINTIFY_BASE}/shops/${shopId}/products/${printifyProductId}.json`, {
-    headers: { Authorization: `Bearer ${key}` },
-  });
-  if (!res.ok) return null;
-  const json = await res.json();
-  const variant = (json.variants ?? []).find((v) => String(v.id) === String(printifyVariantId));
-  // Printify variant cost is in minor units (cents/pence).
-  const cents = variant?.cost ?? variant?.price;
-  return Number.isFinite(cents) ? cents / 100 : null;
-}
-
-export async function fetchBaseCost(provider, providerVariantId, providerProductId) {
+export async function printfulCatalogCost(catalogVariantId) {
+  if (!catalogVariantId) return null;
+  if (printfulCostCache.has(catalogVariantId)) return printfulCostCache.get(catalogVariantId);
   try {
-    if (provider === "printful") return await printfulVariantCost(providerVariantId);
-    if (provider === "printify") {
-      const shopId = process.env.PRINTIFY_SHOP_ID;
-      return await printifyVariantCost(shopId, providerProductId, providerVariantId);
+    const res = await fetch(`${PRINTFUL_BASE}/products/variant/${encodeURIComponent(catalogVariantId)}`, {
+      headers: printfulHeaders(),
+    });
+    if (!res.ok) {
+      printfulCostCache.set(catalogVariantId, null);
+      return null;
     }
+    const j = await res.json();
+    const raw = j?.result?.variant?.price ?? j?.result?.price;
+    const cost = typeof raw === "string" ? Number(raw) : raw;
+    const value = Number.isFinite(cost) ? cost : null;
+    printfulCostCache.set(catalogVariantId, value);
+    return value;
   } catch {
-    // Network/API hiccup — the migration flags it rather than failing the run.
+    printfulCostCache.set(catalogVariantId, null);
+    return null;
   }
-  return null;
+}
+
+// One-shot listing of every sync product in the connected store. Returns
+// Map<shopifyLegacyProductId(string), { syncProduct, syncVariants[] }>.
+// sync_variants[] each contain: id, external_id (shopify variant legacy id),
+// variant_id (catalog variant id ⇒ provider_variant_id).
+export async function buildPrintfulMap(progress = () => {}) {
+  if (!process.env.PRINTFUL_API_KEY) return new Map();
+  // 1) List all sync products (paginated).
+  const list = [];
+  let offset = 0;
+  while (true) {
+    const res = await fetch(`${PRINTFUL_BASE}/sync/products?limit=100&offset=${offset}`, {
+      headers: printfulHeaders(),
+    });
+    if (!res.ok) break;
+    const j = await res.json();
+    const page = j?.result ?? [];
+    list.push(...page);
+    if (page.length < 100) break;
+    offset += 100;
+    progress(`Printful list… ${list.length}`);
+  }
+  // 2) Detail-fetch each for sync_variants (where the catalog variant_id lives).
+  const map = new Map();
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i];
+    try {
+      const r = await fetch(`${PRINTFUL_BASE}/sync/products/${p.id}`, { headers: printfulHeaders() });
+      if (!r.ok) continue;
+      const dj = await r.json();
+      const syncProduct = dj?.result?.sync_product;
+      const syncVariants = dj?.result?.sync_variants ?? [];
+      if (syncProduct?.external_id) {
+        map.set(String(syncProduct.external_id), { syncProduct, syncVariants });
+      }
+    } catch {
+      /* skip and continue */
+    }
+    if (i % 20 === 0) progress(`Printful detail ${i + 1}/${list.length}`);
+  }
+  return map;
+}
+
+// ── JetPrint ─────────────────────────────────────────────────────────────────
+// JetPrint API docs: https://docs.jetprintapp.com/  (Bearer auth).
+// Returns Map<shopifyLegacyProductId(string), jetprintProduct>. The exact
+// product shape (variant id field name, cost units) may vary by API version;
+// the migration accesses fields defensively and degrades to provider-only
+// mapping if anything is missing.
+const JETPRINT_BASE = "https://api.jetprintapp.com";
+
+function jetprintHeaders() {
+  const key = process.env.JETPRINT_API_KEY;
+  return key ? { Authorization: `Bearer ${key}` } : null;
+}
+
+export async function buildJetprintMap(progress = () => {}) {
+  const h = jetprintHeaders();
+  if (!h) return new Map();
+  const map = new Map();
+  // Common JetPrint pattern: paginated product list with shopify_product_id.
+  // Tries both /open-api/v1/products and /open-api/v2/products in case the
+  // tenant is on a different API version.
+  const paths = ["/open-api/v1/products", "/open-api/v2/products"];
+  for (const path of paths) {
+    try {
+      let page = 1;
+      let any = false;
+      while (true) {
+        const res = await fetch(`${JETPRINT_BASE}${path}?page=${page}&limit=100`, { headers: h });
+        if (!res.ok) break;
+        const j = await res.json();
+        // Accept either {data: [...]} or {result: [...]} or [...]
+        const items = j?.data ?? j?.result ?? (Array.isArray(j) ? j : []);
+        if (!items.length) break;
+        any = true;
+        for (const it of items) {
+          // The Shopify product id can live under several keys depending on
+          // the API version — try the common ones.
+          const ext =
+            it.shopify_product_id ??
+            it.external_product_id ??
+            it.external_id ??
+            it?.shopify?.product_id ??
+            null;
+          if (ext) map.set(String(ext), it);
+        }
+        progress(`JetPrint list… ${map.size}`);
+        if (items.length < 100) break;
+        page++;
+      }
+      if (any) return map; // first working path wins
+    } catch {
+      /* try next path */
+    }
+  }
+  return map;
+}
+
+// ── Printify ─────────────────────────────────────────────────────────────────
+export async function buildPrintifyMap(progress = () => {}) {
+  const key = process.env.PRINTIFY_API_KEY;
+  const shop = process.env.PRINTIFY_SHOP_ID;
+  if (!key || !shop) return new Map();
+  const map = new Map();
+  let page = 1;
+  while (true) {
+    const res = await fetch(`${PRINTIFY_BASE}/shops/${shop}/products.json?limit=50&page=${page}`, {
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    if (!res.ok) break;
+    const j = await res.json();
+    const data = j?.data ?? [];
+    for (const p of data) {
+      if (p?.external?.id) map.set(String(p.external.id), p);
+    }
+    progress(`Printify list… ${map.size}`);
+    if (data.length < 50) break;
+    page++;
+  }
+  return map;
 }

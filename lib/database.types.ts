@@ -6,7 +6,7 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 export type UserRole = "master" | "regular" | "content";
 export type ProductStatus = "draft" | "published";
-export type PodProvider = "printful" | "printify";
+export type PodProvider = "printful" | "printify" | "jetprint";
 export type OrderStatus =
   | "pending"
   | "paid"

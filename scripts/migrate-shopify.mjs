@@ -6,60 +6,59 @@
  *   - Shopify is the SINGLE SOURCE OF TRUTH for customer-facing content:
  *     title, description, SEO, images, option values, SKU.
  *   - Printful / Printify are used ONLY to derive provider mapping
- *     (provider, provider_product_id, provider_variant_id) and base_cost
- *     (for profit reporting). Their titles, descriptions, and images must
- *     NEVER overwrite the Shopify content — half the images and all the text
- *     in Shopify have been edited post-import and have diverged from POD.
+ *     (provider, provider_product_id, provider_variant_id) and base_cost.
+ *     Their titles, descriptions, and images NEVER overwrite the Shopify
+ *     content — half the images and all the text were edited in Shopify
+ *     after the original import and have diverged from POD content.
  *
- * Pulls all products from the Shopify Admin API (GraphQL), normalises into the
- * new schema, generates clean SKUs, maps each variant to its POD provider via
- * Shopify metafields (namespace `nn`), pulls base_cost from Printful/Printify,
- * uploads images to Supabase Storage, and upserts. Validation-clean products
- * AUTO-PUBLISH; flagged products stay as drafts with reasons.
+ * Provider detection (no metafields required — confirmed empirically against
+ * this catalogue):
+ *   1) Printful sync product whose external_id matches Shopify's
+ *      product.legacyResourceId → provider=printful, provider_product_id =
+ *      sync_product.id, per-variant provider_variant_id = sync_variant.variant_id
+ *      (catalog id). base_cost = catalog variant price (cached per variant_id).
+ *   2) Else Printify product whose external.id matches → provider=printify,
+ *      provider_product_id = product.id, per-variant provider_variant_id =
+ *      variant.id, base_cost = variant.cost / 100.
+ *   3) Else vendor == "JetPrint Fulfillment" → provider=jetprint, IDs/cost null
+ *      (no JetPrint API integration; flagged for manual fulfilment).
+ *   4) Else provider=null (flagged as draft, "no provider mapping").
  *
- * Idempotent — re-running is safe. Use `--dry-run` to report without writing.
+ * Image-alt fallback: when Shopify alt is empty OR looks like a URL, fall back
+ * to the product title. Not an edit to Shopify, just a sensible default at import.
  *
- * Auth: OAuth client credentials grant (static Admin API tokens were deprecated
- * in January 2026). See scripts/lib/shopify.mjs.
- *
- * Required env:
- *   SHOPIFY_STORE_DOMAIN, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET
- *   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
- * Optional env:
- *   PRINTFUL_API_KEY, PRINTIFY_API_KEY, PRINTIFY_SHOP_ID
- *   SHOPIFY_API_VERSION   (defaults to 2026-01)
- *   SHOPIFY_IMAGE_HOST    (override the image source host)
- *   MIGRATE_OVERRIDES     (path to a JSON file: { "<shopify-handle>": {provider, provider_product_id, variant_overrides: {<sku>: pvId}} })
+ * Idempotent: re-runnable. Match on (source='shopify', source_id=gid).
  *
  * Usage:
- *   npm run migrate:shopify -- --dry-run
- *   npm run migrate:shopify -- --limit 20
- *   npm run migrate:shopify -- --skip-images
+ *   npm run migrate:shopify:dry      — report only, no Supabase writes
+ *   npm run migrate:shopify          — real run
+ *   npm run migrate:shopify -- --limit 20         — only first N products
+ *   npm run migrate:shopify -- --skip-images       — don't upload images
+ *   npm run migrate:shopify -- --skip-costs        — don't fetch Printful catalog costs (faster)
  *   npm run migrate:shopify -- --report ./migration-report.md
  */
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { iterateProducts } from "./lib/shopify.mjs";
-import { fetchBaseCost } from "./lib/providers.mjs";
+import {
+  buildPrintfulMap,
+  buildPrintifyMap,
+  buildJetprintMap,
+  printfulCatalogCost,
+} from "./lib/providers.mjs";
 
 // ── args ─────────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
-const flag = (name) => args.includes(name);
-const opt = (name, fallback) => {
-  const i = args.indexOf(name);
-  return i >= 0 && args[i + 1] && !args[i + 1].startsWith("--") ? args[i + 1] : fallback;
+const flag = (n) => args.includes(n);
+const opt = (n, fb) => {
+  const i = args.indexOf(n);
+  return i >= 0 && args[i + 1] && !args[i + 1].startsWith("--") ? args[i + 1] : fb;
 };
 const DRY_RUN = flag("--dry-run");
 const SKIP_IMAGES = flag("--skip-images");
+const SKIP_COSTS = flag("--skip-costs");
 const LIMIT = Number(opt("--limit", 0)) || 0;
 const REPORT_PATH = opt("--report", "./migration-report.md");
-
-// ── overrides (optional manual mapping fallback) ─────────────────────────────
-const OVERRIDES = (() => {
-  const path = process.env.MIGRATE_OVERRIDES;
-  if (!path || !existsSync(path)) return {};
-  try { return JSON.parse(readFileSync(path, "utf8")); } catch { return {}; }
-})();
 
 // ── Supabase service client (bypasses RLS — trusted server context) ──────────
 function supa() {
@@ -70,8 +69,6 @@ function supa() {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-const PROVIDERS = new Set(["printful", "printify"]);
-
 function slugify(input) {
   return String(input)
     .toLowerCase()
@@ -87,51 +84,116 @@ function htmlToText(html) {
   return html
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/h[1-6]>/gi, "\n\n")
     .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
-// Generates a clean new SKU. Scheme: NN-{CAT}-{seq:04}-{variantSuffix?}
-// CAT comes from product_type (first 3 letters uppercased) or "GEN".
-function buildSku(product, variant, seq, variantSeq) {
-  const cat = (product.productType || "gen").replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase() || "GEN";
-  const base = `NN-${cat}-${String(seq).padStart(4, "0")}`;
-  const opts = (variant.selectedOptions || []).map((o) => slugify(o.value).slice(0, 6)).join("-");
-  return opts ? `${base}-${opts}` : variantSeq ? `${base}-${variantSeq}` : base;
+// Numeric Shopify product id from a gid like "gid://shopify/Product/12345".
+function legacyId(gid) {
+  if (!gid) return null;
+  const m = String(gid).match(/\/(\d+)$/);
+  return m ? m[1] : null;
 }
 
-// Detect provider + IDs in priority order:
-//   1. Shopify metafields (nn.provider, nn.provider_product_id, nn.provider_variant_id)
-//   2. MIGRATE_OVERRIDES file (keyed by product handle)
-//   3. Tags / SKU patterns ("printful" / "printify")
-function detectProviderMapping(product, variant) {
-  const meta = (k, obj) => (obj?.[k]?.value ?? "").toString().trim().toLowerCase() || null;
+// Clean alt text: empty or URL-shaped → product title.
+function cleanAlt(rawAlt, fallbackTitle) {
+  const v = (rawAlt ?? "").trim();
+  if (!v) return fallbackTitle;
+  if (/^https?:\/\//i.test(v)) return fallbackTitle;
+  return v;
+}
 
-  let provider = meta("provider", product) || meta("provider", variant);
-  let providerProductId = meta("provider_product_id", product);
-  let providerVariantId = meta("provider_variant_id", variant);
+// New SKU scheme: NN-{CAT}-{seq:04}-{size?-color?}
+function buildSku(product, variant, seq) {
+  const cat = (product.productType || "gen").replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase() || "GEN";
+  const base = `NN-${cat}-${String(seq).padStart(4, "0")}`;
+  const opts = (variant.selectedOptions || [])
+    .map((o) => slugify(o.value).slice(0, 6))
+    .filter(Boolean)
+    .join("-");
+  return opts ? `${base}-${opts}` : base;
+}
 
-  const override = OVERRIDES[product.handle];
-  if (override) {
-    provider ||= override.provider;
-    providerProductId ||= override.provider_product_id;
-    providerVariantId ||= override.variant_overrides?.[variant.sku ?? ""] ?? null;
+// Pick provider + IDs for one Shopify product/variant. ONLY mapping fields.
+function detectMapping(shopifyProduct, shopifyVariant, pfMap, pyMap, jpMap) {
+  const productLegacy = legacyId(shopifyProduct.id);
+  const variantLegacy = legacyId(shopifyVariant.id);
+
+  // 1) Printful (largest provider in this catalogue).
+  const pf = pfMap.get(productLegacy);
+  if (pf) {
+    const sv = pf.syncVariants.find((s) => String(s.external_id) === String(variantLegacy));
+    return {
+      provider: "printful",
+      provider_product_id: pf.syncProduct.id ? String(pf.syncProduct.id) : null,
+      provider_variant_id: sv?.variant_id ? String(sv.variant_id) : null,
+    };
   }
-
-  if (!provider) {
-    const tags = (product.tags || []).map((t) => t.toLowerCase());
-    if (tags.includes("printful")) provider = "printful";
-    else if (tags.includes("printify")) provider = "printify";
-    else {
-      const sku = (variant.sku || "").toLowerCase();
-      if (sku.includes("printful")) provider = "printful";
-      else if (sku.includes("printify")) provider = "printify";
-    }
+  // 2) Printify.
+  const py = pyMap.get(productLegacy);
+  if (py) {
+    const pv = (py.variants ?? []).find(
+      (v) => String(v.id) === String(variantLegacy) || v.sku === shopifyVariant.sku,
+    );
+    return {
+      provider: "printify",
+      provider_product_id: py.id ? String(py.id) : null,
+      provider_variant_id: pv?.id ? String(pv.id) : null,
+      base_cost_cents: pv?.cost ?? null,
+    };
   }
-
-  if (provider && !PROVIDERS.has(provider)) provider = null;
-  return { provider, providerProductId, providerVariantId };
+  // 3) JetPrint — API match by Shopify product id, with variant + cost if shape known.
+  const jp = jpMap.get(productLegacy);
+  if (jp) {
+    // JetPrint variant + cost field names vary across API versions.
+    const variants =
+      jp.variants ??
+      jp.product_variants ??
+      jp.skus ??
+      jp.product?.variants ??
+      [];
+    const jv =
+      variants.find(
+        (v) =>
+          String(v.shopify_variant_id ?? v.external_variant_id ?? v.external_id ?? "") ===
+            String(variantLegacy) || v.sku === shopifyVariant.sku,
+      ) || variants[0];
+    const cost = jv?.cost ?? jv?.base_cost ?? jv?.price?.cost ?? null;
+    return {
+      provider: "jetprint",
+      provider_product_id: String(jp.id ?? jp.product_id ?? jp.jetprint_product_id ?? "") || null,
+      provider_variant_id:
+        String(jv?.id ?? jv?.variant_id ?? jv?.jetprint_variant_id ?? "") || null,
+      base_cost_cents:
+        typeof cost === "number" && cost > 1 ? cost : null, // cents
+      base_cost_units: typeof cost === "number" && cost <= 1 ? null : null,
+    };
+  }
+  // 4) Printful SKU-pattern fallback. The Printful Shopify app writes variant
+  //    SKUs in the form `{sync_product_id}_{catalog_variant_id}` (e.g.
+  //    "8409906_11546"). When the sync linkage is broken or stale, we can
+  //    still recover the catalog variant_id (drives base_cost + fulfilment).
+  const skuMatch = (shopifyVariant.sku || "").match(/^(\d+)_(\d+)$/);
+  if (skuMatch) {
+    return {
+      provider: "printful",
+      provider_product_id: skuMatch[1],         // sync_product_id (informational)
+      provider_variant_id: skuMatch[2],         // catalog variant_id ⇒ what fulfilment needs
+    };
+  }
+  // 5) JetPrint fallback by vendor (no API match — still mark as jetprint so
+  //    the owner can fulfil manually).
+  if ((shopifyProduct.vendor || "").toLowerCase().includes("jetprint")) {
+    return { provider: "jetprint" };
+  }
+  // 6) Unknown.
+  return { provider: null };
 }
 
 function validateProduct(p, normalized) {
@@ -139,11 +201,16 @@ function validateProduct(p, normalized) {
   if (!normalized.description || normalized.description.length < 20)
     issues.push("description thin or missing");
   if ((normalized.images?.length ?? 0) === 0) issues.push("no images");
-  if ((normalized.images ?? []).some((i) => !i.alt)) issues.push("image alt text missing");
   if (!normalized.variants?.length) issues.push("no variants");
   for (const v of normalized.variants ?? []) {
-    if (!v.provider || !v.provider_variant_id) issues.push(`variant ${v.sku || "?"} has no provider mapping`);
+    if (!v.provider) issues.push(`variant ${v.sku || "?"} has no provider mapping`);
     if (!(v.price > 0)) issues.push(`variant ${v.sku || "?"} has zero/odd price`);
+  }
+  if (
+    typeof normalized.compare_at_price === "number" &&
+    normalized.compare_at_price <= normalized.price
+  ) {
+    issues.push("compare_at_price ≤ price (looks reversed — sale badge would mis-trigger)");
   }
   return issues;
 }
@@ -158,10 +225,9 @@ async function uploadImage(client, productSlug, idx, srcUrl, alt) {
     const contentType = res.headers.get("content-type") || "image/jpeg";
     const ext = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
     const path = `${productSlug}/${idx}.${ext}`;
-    const { error } = await client.storage.from("product-images").upload(path, buffer, {
-      contentType,
-      upsert: true,
-    });
+    const { error } = await client.storage
+      .from("product-images")
+      .upload(path, buffer, { contentType, upsert: true });
     if (error) throw error;
     const { data } = client.storage.from("product-images").getPublicUrl(path);
     return { url: data.publicUrl, alt };
@@ -172,42 +238,59 @@ async function uploadImage(client, productSlug, idx, srcUrl, alt) {
 }
 
 // ── normalise one Shopify product ────────────────────────────────────────────
-async function normalise(p, seq, sb) {
+async function normalise(p, seq, sb, pfMap, pyMap, jpMap) {
   const slug = slugify(p.handle || p.title);
   const description = htmlToText(p.descriptionHtml);
-  const productProvider = detectProviderMapping(p, {}).provider;
-  const productProviderId = (p.provider_product_id?.value ?? "").trim() || OVERRIDES[p.handle]?.provider_product_id || null;
 
+  // Provider classification at the product level uses the first variant's mapping.
   const variants = [];
   let vIdx = 0;
+  let productProvider = null;
+  let productProviderId = null;
+
   for (const v of p.variants?.nodes ?? []) {
     vIdx++;
-    const mapping = detectProviderMapping(p, v);
-    const provider = mapping.provider || productProvider;
-    const provider_variant_id = mapping.providerVariantId;
-    const provider_product_id = mapping.providerProductId || productProviderId;
-    const baseCost = await fetchBaseCost(provider, provider_variant_id, provider_product_id);
-    const opts = Object.fromEntries((v.selectedOptions || []).map((o) => [o.name.toLowerCase(), o.value]));
+    const m = detectMapping(p, v, pfMap, pyMap, jpMap);
+    if (vIdx === 1) {
+      productProvider = m.provider;
+      productProviderId = m.provider_product_id ?? null;
+    }
+    // base_cost:
+    //   Printify  → variant.cost is already in cents
+    //   JetPrint  → variant.cost is typically in cents too (when API returns it)
+    //   Printful  → catalog lookup, returns major units (£)
+    let baseCost = null;
+    if ((m.provider === "printify" || m.provider === "jetprint") && typeof m.base_cost_cents === "number") {
+      baseCost = m.base_cost_cents / 100;
+    } else if (m.provider === "printful" && !SKIP_COSTS && m.provider_variant_id) {
+      baseCost = await printfulCatalogCost(m.provider_variant_id);
+    }
+    const opts = Object.fromEntries(
+      (v.selectedOptions || []).map((o) => [o.name.toLowerCase(), o.value]),
+    );
     variants.push({
       source_id: v.id,
-      sku: buildSku(p, v, seq, vIdx),
+      sku: buildSku(p, v, seq),
       title: v.title === "Default Title" ? null : v.title,
       size: opts.size || null,
       color: opts.color || opts.colour || null,
       price: Number(v.price) || 0,
       base_cost: baseCost,
-      provider,
-      provider_variant_id,
-      provider_product_id,
+      provider: m.provider,
+      provider_variant_id: m.provider_variant_id ?? null,
       sort_order: vIdx - 1,
     });
   }
 
+  // Image alt fallback: empty or URL-looking → product title.
   const imageNodes = p.images?.nodes ?? (p.featuredImage ? [p.featuredImage] : []);
   const images = [];
   let i = 0;
   for (const img of imageNodes) {
-    const uploaded = sb ? await uploadImage(sb, slug, i, img.url, img.altText || p.title) : { url: img.url, alt: img.altText || p.title };
+    const alt = cleanAlt(img.altText, p.title);
+    const uploaded = sb
+      ? await uploadImage(sb, slug, i, img.url, alt)
+      : { url: img.url, alt };
     images.push({ ...uploaded, sort_order: i, is_primary: i === 0 });
     i++;
   }
@@ -229,6 +312,7 @@ async function normalise(p, seq, sb) {
     base_cost: firstVariant?.base_cost ?? null,
     variants,
     images,
+    _vendor: p.vendor,
   };
 }
 
@@ -252,43 +336,92 @@ async function upsertProduct(sb, normalized, autoPublish) {
     published_at: autoPublish ? new Date().toISOString() : null,
   };
 
-  // Upsert product by (source, source_id) — idempotent.
   const { data: existing } = await sb
     .from("products")
-    .select("id, status")
+    .select("id, status, slug")
     .eq("source", normalized.source)
     .eq("source_id", normalized.source_id)
     .maybeSingle();
 
   let productId;
   if (existing) {
-    // Preserve a manual publish if the owner already promoted a draft.
-    if (existing.status === "published") productRow.status = "published";
+    if (existing.status === "published") productRow.status = "published"; // never demote a manual publish
     const { error } = await sb.from("products").update(productRow).eq("id", existing.id);
     if (error) throw error;
     productId = existing.id;
   } else {
-    const { data, error } = await sb.from("products").insert(productRow).select("id").single();
-    if (error) throw error;
-    productId = data.id;
+    // Handle slug collisions (different shopify product, same title).
+    const tryRow = { ...productRow };
+    let suffix = 1;
+    while (true) {
+      const { data: ins, error: insErr } = await sb
+        .from("products")
+        .insert(tryRow)
+        .select("id")
+        .single();
+      if (!insErr) {
+        productId = ins.id;
+        break;
+      }
+      if (insErr.code === "23505" && (insErr.message || "").includes("products_slug")) {
+        suffix++;
+        tryRow.slug = `${productRow.slug}-${suffix}`;
+        continue;
+      }
+      // Graceful fallback when the `jetprint` enum value hasn't been migrated
+      // yet — store as unmapped so the run completes. A re-run after the SQL
+      // is applied picks them up correctly.
+      if (
+        insErr.code === "22P02" &&
+        (insErr.message || "").includes("jetprint") &&
+        tryRow.provider === "jetprint"
+      ) {
+        tryRow.provider = null;
+        tryRow.provider_product_id = null;
+        continue;
+      }
+      throw insErr;
+    }
   }
 
-  // Replace variants (idempotent — match on source_id of the variant).
+  // Variants — match on source_id (Shopify variant gid), upsert.
   for (const v of normalized.variants) {
-    const row = { ...v, product_id: productId };
     const { data: ev } = await sb
       .from("variants")
       .select("id")
       .eq("source_id", v.source_id)
       .maybeSingle();
     if (ev) {
-      await sb.from("variants").update(row).eq("id", ev.id);
+      const vRow = { ...v, product_id: productId };
+      const { error } = await sb.from("variants").update(vRow).eq("id", ev.id);
+      if (error && error.code === "22P02" && (error.message || "").includes("jetprint")) {
+        vRow.provider = null;
+        await sb.from("variants").update(vRow).eq("id", ev.id);
+      } else if (error) {
+        throw error;
+      }
     } else {
-      await sb.from("variants").insert(row);
+      // SKU collision guard + jetprint-enum fallback
+      const tryRow = { ...v, product_id: productId };
+      let suffix = 1;
+      while (true) {
+        const { error } = await sb.from("variants").insert(tryRow);
+        if (!error) break;
+        if (error.code === "23505" && (error.message || "").includes("variants_sku")) {
+          suffix++;
+          tryRow.sku = `${v.sku}-${suffix}`;
+          continue;
+        }
+        if (error.code === "22P02" && (error.message || "").includes("jetprint")) {
+          tryRow.provider = null;
+          continue;
+        }
+        throw error;
+      }
     }
   }
 
-  // Replace images (delete + re-insert — they're identified by URL+order).
+  // Images: replace (Shopify is source of truth, easier than diffing).
   await sb.from("product_images").delete().eq("product_id", productId);
   if (normalized.images.length) {
     await sb.from("product_images").insert(
@@ -301,14 +434,34 @@ async function upsertProduct(sb, normalized, autoPublish) {
 // ── main ─────────────────────────────────────────────────────────────────────
 async function main() {
   console.log(`\nShopify → Supabase migration ${DRY_RUN ? "(DRY RUN)" : ""}\n`);
+
   const sb = DRY_RUN ? null : supa();
-  const report = { clean: 0, flagged: 0, total: 0, flags: [] };
+
+  console.log("Building POD lookup maps…");
+  const [pfMap, pyMap, jpMap] = await Promise.all([
+    buildPrintfulMap((m) => process.stdout.write(`\r  ${m}    `)),
+    buildPrintifyMap(),
+    buildJetprintMap(),
+  ]);
+  process.stdout.write("\n");
+  console.log(`  Printful sync products: ${pfMap.size}`);
+  console.log(`  Printify products:      ${pyMap.size}`);
+  console.log(`  JetPrint products:      ${jpMap.size}${jpMap.size === 0 ? "  (no API key or no products)" : ""}`);
+  console.log();
+
+  const report = {
+    total: 0,
+    autoPublished: 0,
+    flagged: 0,
+    byProvider: { printful: 0, printify: 0, jetprint: 0, unmapped: 0 },
+    flags: [],
+  };
 
   let seq = 0;
   for await (const p of iterateProducts()) {
     seq++;
     if (LIMIT && seq > LIMIT) break;
-    const normalized = await normalise(p, seq, sb);
+    const normalized = await normalise(p, seq, sb, pfMap, pyMap, jpMap);
     const issues = validateProduct(p, normalized);
     const autoPublish = issues.length === 0;
 
@@ -321,13 +474,25 @@ async function main() {
     }
 
     report.total++;
+    if (issues.length === 0) report.autoPublished++;
+    else report.flagged++;
+
+    if (normalized.provider) report.byProvider[normalized.provider]++;
+    else report.byProvider.unmapped++;
+
     if (issues.length === 0) {
-      report.clean++;
-      console.log(`✓ ${normalized.slug}  — ${autoPublish ? "published" : "draft"}`);
+      console.log(`✓ ${normalized.slug.padEnd(50)} [${normalized.provider ?? "—"}]  published`);
     } else {
-      report.flagged++;
-      report.flags.push({ slug: normalized.slug, title: normalized.title, issues });
-      console.log(`✗ ${normalized.slug}  — draft (${issues.length} issue${issues.length === 1 ? "" : "s"})`);
+      report.flags.push({
+        slug: normalized.slug,
+        title: normalized.title,
+        provider: normalized.provider,
+        vendor: normalized._vendor,
+        issues,
+      });
+      console.log(
+        `✗ ${normalized.slug.padEnd(50)} [${normalized.provider ?? "—"}]  draft (${issues.length} issue${issues.length === 1 ? "" : "s"})`,
+      );
     }
   }
 
@@ -335,21 +500,33 @@ async function main() {
   const lines = [
     `# Migration report${DRY_RUN ? " (DRY RUN)" : ""}`,
     "",
-    `- Total: **${report.total}**`,
-    `- Auto-published (clean): **${report.clean}**`,
+    `- Total products: **${report.total}**`,
+    `- Auto-published (clean): **${report.autoPublished}**`,
     `- Flagged as drafts: **${report.flagged}**`,
     "",
-    "## Flagged products",
+    `## Provider breakdown`,
+    `- Printful: **${report.byProvider.printful}**`,
+    `- Printify: **${report.byProvider.printify}**`,
+    `- JetPrint: **${report.byProvider.jetprint}**`,
+    `- Unmapped: **${report.byProvider.unmapped}**`,
+    "",
+    `## Flagged products`,
     "",
   ];
+  // Group flags by reason for quick scanning.
   for (const f of report.flags) {
-    lines.push(`### ${f.title} — \`${f.slug}\``);
+    lines.push(`### ${f.title} — \`${f.slug}\`  *${f.provider ?? "unmapped"}, vendor=${f.vendor || "—"}*`);
     for (const i of f.issues) lines.push(`- ${i}`);
     lines.push("");
   }
   writeFileSync(REPORT_PATH, lines.join("\n"));
-  console.log(`\nReport written to ${REPORT_PATH}`);
-  console.log(`Clean: ${report.clean} · Flagged: ${report.flagged} · Total: ${report.total}\n`);
+  console.log(`\nReport: ${REPORT_PATH}`);
+  console.log(
+    `Clean: ${report.autoPublished} · Flagged: ${report.flagged} · Total: ${report.total}`,
+  );
+  console.log(
+    `By provider — printful=${report.byProvider.printful}, printify=${report.byProvider.printify}, jetprint=${report.byProvider.jetprint}, unmapped=${report.byProvider.unmapped}\n`,
+  );
 }
 
 main().catch((err) => {
