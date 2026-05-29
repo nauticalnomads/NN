@@ -501,7 +501,25 @@ New route `app/api/admin/financial.pdf` (ops only) + "Export PDF" link on the pa
 Output validated: `file(1)` reports "PDF document, version 1.4, 1 page(s)", xref offsets
 byte-accurate. Carries the estimate disclaimer.
 
+### HS-7 — Refund request hardening ✅
+
+Fixed a real money bug + added defence-in-depth to the guest refund flow
+(`app/orders/[order]/actions.ts`), without committing to a full accounts system:
+
+- **Amount + currency are now derived server-side from the order** — previously the
+  client supplied them, and that value feeds the Stripe refund admins later action.
+  A malicious caller could have requested an arbitrary refund amount. Now ignored.
+- **Email confirmation**: requester must type the order email; verified case-insensitively
+  against the row. Protects direct API calls and prevents accidental/automated requests.
+- **Duplicate guard**: one open/completed refund per order (no spam / duplicate owner alerts).
+- Client (`RequestRefund.tsx`) collects the email and surfaces the server error.
+- Verified all three guards against the live DB (wrong email rejected, amount derived,
+  duplicate rejected).
+
+**Still open:** full customer accounts (login + order-history scoping + welcome email) remains
+the larger separate effort; this hardening covers the immediate money-touching risk.
+
 ### Still open (high-severity)
 
 - On-sale blog trigger (needs product price-edit UI).
-- Customer accounts / refund auth (UUID-as-bearer is unsafe) — architecturally largest.
+- Full customer accounts (login + proper per-account order scoping) — architecturally largest.

@@ -65,7 +65,7 @@ export default async function OrderPage({ params }: { params: Promise<{ order: s
           Status: <span className="text-ink uppercase">{r.status}</span>
         </p>
       </div>
-      {paid && <RequestRefund orderId={r.id} total={r.grand_total} currency={r.currency} />}
+      {paid && <RequestRefund orderId={r.id} />}
     </Container>
   );
 }
