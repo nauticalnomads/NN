@@ -293,11 +293,35 @@ Storefront verified end-to-end against real data:
 3. ✅ Printify live shipping
 4. ✅ Admin shipping-zone editor + Make.com webhook field
 5. ✅ Owner-alert wiring + `/admin/notifications` inbox
-6. ⏳ `/admin/orders/[id]` detail + manual-fallback view + retry button — NEXT
-7. ⏳ Retry-with-backoff for transient POD failures
+6. ✅ `/admin/orders/[id]` detail + manual-fallback view + retry button
+7. ⏳ Retry-with-backoff for transient POD failures — NEXT
 8. ⏳ Stripe `charge.refunded` / `refund.updated` reconciliation
 
 ---
+
+## Step 6 — `/admin/orders/[id]` detail page ✅
+
+### Built
+
+- **`app/admin/orders/[id]/page.tsx`** — full order detail: customer + shipping address, line
+  items table (title/variant/SKU/provider IDs/qty/price), order totals, tracking entries,
+  provider orders summary, full `fulfilment_attempts` history with timestamps/status/errors.
+  - Attention banner (amber) when `fulfilment_failed` or `awaiting_fulfilment`.
+  - Status badge with colour coding.
+  - Uses `createServiceClient` (ops only, `requireOps`).
+- **Manual-fallback section** (shown only when attention needed): per-provider collapsible form
+  to paste a provider order reference + optional tracking number. Saves a `fulfilment_attempts`
+  row (status=success, `::manual` idempotency key suffix) and updates order status to
+  `fulfilling`. Appends tracking to `orders.tracking` array if provided.
+- **"Retry auto-fulfilment" button** — calls `autoFulfilOrder(orderId)` server-side (idempotent
+  on `order_id::provider`). Guard: only for retryable statuses.
+- **`app/admin/orders/page.tsx`** — order number is now a `<Link>` to the detail page; rows
+  highlight on hover.
+
+### Verified
+
+- `tsc --noEmit` clean.
+- `next build` succeeds; `/admin/orders/[id]` present as dynamic route (`ƒ`).
 
 ## Step 5 — Owner alerts + `/admin/notifications` inbox ✅
 

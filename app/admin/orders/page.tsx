@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireOps } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { formatPrice } from "@/lib/format";
@@ -53,8 +54,18 @@ export default async function AdminOrders() {
           </thead>
           <tbody>
             {rows.map((o) => (
-              <tr key={o.id} className="border-t border-ink/10 font-body text-body text-ink">
-                <td className="px-4 py-3 font-mono">{o.order_number ?? o.id.slice(0, 8)}</td>
+              <tr
+                key={o.id}
+                className="border-t border-ink/10 font-body text-body text-ink hover:bg-surface-2"
+              >
+                <td className="px-4 py-3 font-mono">
+                  <Link
+                    href={`/admin/orders/${o.id}`}
+                    className="text-ink no-underline hover:text-accent-sun"
+                  >
+                    {o.order_number ?? o.id.slice(0, 8)}
+                  </Link>
+                </td>
                 <td className="px-4 py-3">{o.email}</td>
                 <td
                   className={`px-4 py-3 font-mono text-caption uppercase ${STATUS_CLASS[o.status] || ""}`}
