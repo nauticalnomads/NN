@@ -3,6 +3,8 @@
 // base_cost. They never produce titles, descriptions, images, or anything else
 // that touches displayed content — that all comes from Shopify.
 
+import { fetchWithRetry } from "./retry.mjs";
+
 const PRINTFUL_BASE = "https://api.printful.com";
 const PRINTIFY_BASE = "https://api.printify.com/v1";
 
@@ -21,11 +23,10 @@ export async function printfulCatalogCost(catalogVariantId) {
   if (!catalogVariantId) return null;
   if (printfulCostCache.has(catalogVariantId)) return printfulCostCache.get(catalogVariantId);
   try {
-    const res = await fetch(
+    const res = await fetchWithRetry(
       `${PRINTFUL_BASE}/products/variant/${encodeURIComponent(catalogVariantId)}`,
-      {
-        headers: printfulHeaders(),
-      },
+      { headers: printfulHeaders() },
+      { label: "printful catalog" },
     );
     if (!res.ok) {
       printfulCostCache.set(catalogVariantId, null);
@@ -53,7 +54,7 @@ export async function buildPrintfulMap(progress = () => {}) {
   const list = [];
   let offset = 0;
   while (true) {
-    const res = await fetch(`${PRINTFUL_BASE}/sync/products?limit=100&offset=${offset}`, {
+    const res = await fetchWithRetry(`${PRINTFUL_BASE}/sync/products?limit=100&offset=${offset}`, {
       headers: printfulHeaders(),
     });
     if (!res.ok) break;
@@ -69,7 +70,7 @@ export async function buildPrintfulMap(progress = () => {}) {
   for (let i = 0; i < list.length; i++) {
     const p = list[i];
     try {
-      const r = await fetch(`${PRINTFUL_BASE}/sync/products/${p.id}`, {
+      const r = await fetchWithRetry(`${PRINTFUL_BASE}/sync/products/${p.id}`, {
         headers: printfulHeaders(),
       });
       if (!r.ok) continue;
@@ -95,7 +96,7 @@ export async function buildPrintifyMap(progress = () => {}) {
   const map = new Map();
   let page = 1;
   while (true) {
-    const res = await fetch(`${PRINTIFY_BASE}/shops/${shop}/products.json?limit=50&page=${page}`, {
+    const res = await fetchWithRetry(`${PRINTIFY_BASE}/shops/${shop}/products.json?limit=50&page=${page}`, {
       headers: { Authorization: `Bearer ${key}` },
     });
     if (!res.ok) break;

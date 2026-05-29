@@ -40,7 +40,7 @@ export async function getAccessToken() {
     );
   }
 
-  const res = await fetch(`https://${domain}/admin/oauth/access_token`, {
+  const res = await fetchWithRetry(`https://${domain}/admin/oauth/access_token`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({
@@ -48,7 +48,7 @@ export async function getAccessToken() {
       client_secret: secret,
       grant_type: "client_credentials",
     }),
-  });
+  }, { label: "shopify oauth" });
   if (!res.ok) {
     throw new Error(`Shopify auth failed (${res.status}): ${await res.text()}`);
   }
@@ -58,18 +58,24 @@ export async function getAccessToken() {
   return data.access_token;
 }
 
+import { fetchWithRetry } from "./retry.mjs";
+
 // GraphQL Admin API call (preferred — REST is being sunset).
 export async function shopifyGraphQL(query, variables = {}) {
   const domain = requireDomain();
   const token = await getAccessToken();
-  const res = await fetch(`https://${domain}/admin/api/${API_VERSION}/graphql.json`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Shopify-Access-Token": token,
+  const res = await fetchWithRetry(
+    `https://${domain}/admin/api/${API_VERSION}/graphql.json`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": token,
+      },
+      body: JSON.stringify({ query, variables }),
     },
-    body: JSON.stringify({ query, variables }),
-  });
+    { label: "shopify graphql" },
+  );
   if (!res.ok) throw new Error(`Shopify GraphQL ${res.status}: ${await res.text()}`);
   const json = await res.json();
   if (json.errors) {

@@ -44,6 +44,7 @@ import { writeFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { iterateProducts } from "./lib/shopify.mjs";
 import { buildPrintfulMap, buildPrintifyMap, printfulCatalogCost } from "./lib/providers.mjs";
+import { fetchWithRetry } from "./lib/retry.mjs";
 
 // ── args ─────────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -197,7 +198,7 @@ function validateProduct(p, normalized) {
 async function uploadImage(client, productSlug, idx, srcUrl, alt) {
   if (SKIP_IMAGES || !srcUrl) return { url: srcUrl, alt };
   try {
-    const res = await fetch(srcUrl);
+    const res = await fetchWithRetry(srcUrl, {}, { label: `image ${productSlug}#${idx}` });
     if (!res.ok) throw new Error(`fetch ${res.status}`);
     const buffer = Buffer.from(await res.arrayBuffer());
     const contentType = res.headers.get("content-type") || "image/jpeg";
