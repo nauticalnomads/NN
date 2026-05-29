@@ -427,3 +427,63 @@ in-admin inbox.
   the end-to-end test purchase after Step 8.
 - The inbox "View order →" link points at `/admin/orders/[id]`, which Step 6 builds; it
   will 404 until then.
+
+---
+
+## End-to-end test purchase ✅ (Stripe test mode, dry-run fulfilment)
+
+`scripts/e2e-test.mjs` — **23/23 checks pass** against real Supabase + Stripe test mode,
+`fulfilment_dry_run` ON (no real POD orders placed). Covers:
+
+- Supabase connectivity (268 products), sample product+variant with provider IDs.
+- Stripe test-mode Checkout Session creation (real, customer-clickable URL).
+- `checkout.session.completed` webhook → order `pending`→`fulfilling`,
+  `stripe_payment_intent_id` + `placed_at` recorded, dry-run `fulfilment_attempts`
+  row written, `order_items` snapshot carries provider/product/variant IDs.
+- `refund.updated` webhook → local `refunds` row `requested`→`completed`, **idempotent**
+  (duplicate event ignored).
+- Test data cleaned up afterwards.
+
+Run: `node --env-file=.env.local scripts/e2e-test.mjs` (needs `next start` on :3000).
+
+**Not covered** (needs a browser / live exposure): card entry on Stripe's hosted page;
+inbound Printful/Printify tracking webhooks; real Resend delivery.
+
+---
+
+## High-severity audit items (post-launch-blockers)
+
+### HS-1 — Home page metadata + JSON-LD ✅
+
+`app/page.tsx` now exports explicit `metadata` (title/description/canonical/OG) instead of
+relying on the layout default, and renders `WebSite` JSON-LD (`websiteLd()` added to
+`lib/structured-data.ts`). Organization JSON-LD already in root layout.
+
+### HS-2 — Sitemap includes /journal/\* ✅
+
+`getPublishedPostSlugs()` added to `lib/queries.ts`; `app/sitemap.ts` now lists `/journal`
+
+- every published post. (Still gated by `allowIndexing` — empty until cutover.)
+
+### HS-3 — /cart/unsubscribe route ✅
+
+Was referenced in the abandoned-cart email but didn't exist (404). Built
+`app/cart/unsubscribe/page.tsx` + action that records the suppression. Email link now
+carries `?email=`. New `email_suppressions` table (migration
+`20260529120000_email_suppressions.sql`) — the abandoned-cart cron skips suppressed
+addresses. Code is **defensive**: if the table isn't migrated yet, the page still confirms
+and the cron treats everyone as subscribed. **⚠️ Owner must run the new migration SQL.**
+
+### HS-4 — Abandoned-cart cron wired in wrangler.jsonc ✅
+
+Added `triggers.crons: ["0 * * * *"]` + a custom `worker.js` entry that wraps OpenNext's
+`fetch` and adds a `scheduled` handler which replays an authenticated internal POST to
+`/api/cron/abandoned-cart`. Verified: `opennextjs-cloudflare build` succeeds and
+`wrangler deploy --dry-run` bundles the worker with the `scheduled` handler present.
+**⚠️ Owner must set `CRON_SECRET` as a Cloudflare secret.**
+
+### Still open (high-severity)
+
+- Blog auto-queue triggers (`autoQueueForProduct` is never called).
+- PDF export of financial report.
+- Customer accounts / refund auth (UUID-as-bearer is unsafe) — architecturally largest.

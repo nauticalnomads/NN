@@ -1,13 +1,19 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "nn",
-  "main": ".open-next/worker.js",
+  // Custom entry wraps OpenNext's worker (fetch) + adds the scheduled handler.
+  "main": "worker.js",
   "compatibility_date": "2025-03-01",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS",
   },
-  // Secrets (Supabase, Stripe, Resend, POD keys) are set in the Cloudflare
-  // dashboard or via `wrangler secret put` — never committed here.
+  // Abandoned-cart journey (§B-11). Hourly cron drives /api/cron/abandoned-cart
+  // via the scheduled handler in worker.js. CRON_SECRET must be set as a secret.
+  "triggers": {
+    "crons": ["0 * * * *"],
+  },
+  // Secrets (Supabase, Stripe, Resend, POD keys, CRON_SECRET) are set in the
+  // Cloudflare dashboard or via `wrangler secret put` — never committed here.
 }

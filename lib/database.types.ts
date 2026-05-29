@@ -237,6 +237,12 @@ export interface NotificationRow {
   created_at: string;
 }
 
+export interface EmailSuppressionRow {
+  email: string;
+  reason: string | null;
+  created_at: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -256,6 +262,7 @@ export interface Database {
       blog_posts: Table<BlogPostRow, "title" | "slug">;
       fulfilment_attempts: Table<FulfilmentAttemptRow, "order_id">;
       notifications: Table<NotificationRow, "type" | "title">;
+      email_suppressions: Table<EmailSuppressionRow, "email">;
     };
     Views: Record<never, never>;
     Functions: {

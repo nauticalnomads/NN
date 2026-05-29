@@ -177,7 +177,7 @@ export async function sendAbandonedCart(
   const body = `<p>You left something in your bag. We saved it for now.</p>
   <ul style="padding-left:18px;margin-top:8px">${list}</ul>
   <p style="margin-top:20px"><a href="${absoluteUrl("/cart")}" style="color:#C75D3E">Come back to your bag →</a></p>
-  <p style="font-size:12px;color:rgba(42,40,38,0.5);margin-top:30px">Don't want these reminders? <a href="${absoluteUrl("/cart/unsubscribe")}" style="color:rgba(42,40,38,0.5)">Unsubscribe</a>.</p>`;
+  <p style="font-size:12px;color:rgba(42,40,38,0.5);margin-top:30px">Don't want these reminders? <a href="${absoluteUrl(`/cart/unsubscribe?email=${encodeURIComponent(email)}`)}" style="color:rgba(42,40,38,0.5)">Unsubscribe</a>.</p>`;
   return send(email, "Still thinking it over?", shell("Want me to hold it for you?", body));
 }
 

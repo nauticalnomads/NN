@@ -1,15 +1,32 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { Container } from "@/components/Container";
 import { ProductGrid } from "@/components/ProductGrid";
+import { JsonLd } from "@/components/seo/JsonLd";
 import { getFeaturedProducts, getCollections } from "@/lib/queries";
+import { websiteLd } from "@/lib/structured-data";
+import { absoluteUrl, site } from "@/lib/site";
 
 export const revalidate = 300;
+
+export const metadata: Metadata = {
+  title: `${site.name} — ${site.tagline}`,
+  description: site.description,
+  alternates: { canonical: absoluteUrl("/") },
+  openGraph: {
+    type: "website",
+    title: `${site.name} — ${site.tagline}`,
+    description: site.description,
+    url: absoluteUrl("/"),
+  },
+};
 
 export default async function Home() {
   const [featured, collections] = await Promise.all([getFeaturedProducts(8), getCollections()]);
 
   return (
     <>
+      <JsonLd data={websiteLd()} />
       <Container className="py-24 sm:py-32">
         <p className="font-mono text-xs tracking-[0.3em] text-accent-sea uppercase">
           Established MMXXIII

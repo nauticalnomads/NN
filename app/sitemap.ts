@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { absoluteUrl, allowIndexing } from "@/lib/site";
-import { getProductSlugs, getCollections } from "@/lib/queries";
+import { getProductSlugs, getCollections, getPublishedPostSlugs } from "@/lib/queries";
 
 export const revalidate = 3600;
 
@@ -8,8 +8,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Pre-launch: serve an empty sitemap (paired with robots disallow).
   if (!allowIndexing) return [];
 
-  const [slugs, collections] = await Promise.all([getProductSlugs(), getCollections()]);
-  const staticPaths = ["/", "/shop", "/about", "/contact", "/shipping-returns", "/size-guide"];
+  const [slugs, collections, postSlugs] = await Promise.all([
+    getProductSlugs(),
+    getCollections(),
+    getPublishedPostSlugs(),
+  ]);
+  const staticPaths = [
+    "/",
+    "/shop",
+    "/journal",
+    "/about",
+    "/contact",
+    "/shipping-returns",
+    "/size-guide",
+  ];
 
   return [
     ...staticPaths.map((p) => ({ url: absoluteUrl(p), changeFrequency: "weekly" as const })),
@@ -20,6 +32,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...slugs.map((s) => ({
       url: absoluteUrl(`/products/${s}`),
       changeFrequency: "weekly" as const,
+    })),
+    ...postSlugs.map((s) => ({
+      url: absoluteUrl(`/journal/${s}`),
+      changeFrequency: "monthly" as const,
     })),
   ];
 }
