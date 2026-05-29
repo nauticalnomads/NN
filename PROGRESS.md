@@ -295,9 +295,45 @@ Storefront verified end-to-end against real data:
 5. ✅ Owner-alert wiring + `/admin/notifications` inbox
 6. ✅ `/admin/orders/[id]` detail + manual-fallback view + retry button
 7. ✅ Retry-with-backoff for transient POD failures
-8. ⏳ Stripe `charge.refunded` / `refund.updated` reconciliation — NEXT
+8. ✅ Stripe `charge.refunded` / `refund.updated` reconciliation
 
 ---
+
+## Step 8 — Stripe refund webhook reconciliation ✅
+
+Replaced the two no-op cases in `app/api/webhooks/stripe/route.ts`.
+
+### `charge.refunded`
+
+Triggered when any refund succeeds on a charge. Logic:
+
+1. Find our order by `stripe_payment_intent_id`.
+2. For each `succeeded` Stripe refund on the charge, look for an open (not
+   `completed`/`rejected`) local `refunds` row for that order.
+3. **If found:** mark it `completed`, record `stripe_refund_id`, flip order to `refunded`,
+   send customer refund email (fire-and-forget).
+4. **If not found** (refund was issued directly in the Stripe dashboard): insert a new
+   reconciliation `refunds` row (`status=completed`) so it's visible in the admin.
+   Flip order to `refunded`.
+
+- Idempotent: already-completed rows are never touched (`.not("status", "in", …)`).
+
+### `refund.updated`
+
+Triggered on Stripe refund status changes (pending → succeeded, failed, canceled).
+Logic:
+
+1. Look up local `refunds` row by `stripe_refund_id`.
+2. Map Stripe status → our enum (`succeeded→completed`, `failed→failed`, `canceled→rejected`,
+   `pending/requires_action→processing`).
+3. Don't downgrade an already-`completed` or `rejected` row (idempotent).
+4. On `completed`: flip order to `refunded` + send customer email.
+
+### Verified
+
+- `tsc --noEmit` clean.
+- `prettier --check .` clean.
+- No live Stripe test yet — gated on the end-to-end test purchase (all 8 steps now done).
 
 ## Step 7 — Retry-with-backoff for transient POD failures ✅
 
