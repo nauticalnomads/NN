@@ -255,11 +255,40 @@ Added:
 - Validation simplified (no jetprint special-case).
 - Report counts include a "Skipped (JetPrint at source)" total for transparency.
 
+---
+
+## Step 1 — Migration COMPLETE ✅
+
+Final result against live Supabase:
+
+```
+Clean: 268 · Flagged: 0 · Total: 268
+By provider — printful=234, printify=34, unmapped=0
+Skipped (JetPrint at source): 9
+DB: 268 products · 1,155 variants · 2,360 image rows
+```
+
+Run notes:
+- First round flagged 3 transient Supabase REST failures (`upsert failed`).
+  Fixed by wrapping `upsertProduct()` in retry; second round completed all 268
+  cleanly with zero flags.
+- TLS cert-rotation issues on Shopify/Printful/Printify were resolved by the
+  per-call retry helper (`scripts/lib/retry.mjs`) + outer supervisor
+  (`scripts/migrate-supervisor.sh`) — both committed.
+- PDP 500 fix: switched storefront reads to a cookies-free anon client
+  (`lib/supabase/public.ts`). `generateStaticParams` now works without the
+  "page changed from static to dynamic" conflict.
+
+Storefront verified end-to-end against real data:
+- `/` 200 · `/shop` 200 · `/sitemap.xml` 200 · `/admin` 307 (gate)
+- `/products/<real-slug>` 200, renders title + £-formatted price + Shopify CDN image
+- Build succeeds, all 268 product pages + 0 collections SSG'd with 5 min ISR
+
 ### Updated launch-blocker order from audit
 
-1. ✅ Migration (in progress)
+1. ✅ Migration complete (Step 1)
 2. ~~JetPrint integration~~ (closed by removal)
-3. ⏳ Printify live shipping
+3. ⏳ Printify live shipping — NEXT
 4. ⏳ Admin shipping-zone editor
 5. ⏳ Owner-alert wiring + `/admin/notifications` inbox
 6. ⏳ `/admin/orders/[id]` detail + manual-fallback view + retry button
