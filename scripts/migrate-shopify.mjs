@@ -44,7 +44,7 @@ import { writeFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { iterateProducts } from "./lib/shopify.mjs";
 import { buildPrintfulMap, buildPrintifyMap, printfulCatalogCost } from "./lib/providers.mjs";
-import { fetchWithRetry } from "./lib/retry.mjs";
+import { fetchWithRetry, retry } from "./lib/retry.mjs";
 
 // ── args ─────────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -427,7 +427,11 @@ async function main() {
 
     if (!DRY_RUN) {
       try {
-        await upsertProduct(sb, normalized, autoPublish);
+        // Retry transient Supabase REST failures too (supabase-js uses its own
+        // fetch which our fetchWithRetry can't wrap from the outside).
+        await retry(() => upsertProduct(sb, normalized, autoPublish), {
+          label: `upsert ${normalized.slug}`,
+        });
       } catch (err) {
         issues.push(`upsert failed: ${err.message}`);
       }

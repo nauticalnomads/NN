@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import type { CollectionRow } from "@/lib/database.types";
 import { primaryImage, type ProductWithRelations } from "@/lib/product";
 
@@ -23,7 +23,7 @@ export async function getProducts(
   if (!configured()) return { products: [], count: 0 };
   const { limit = 24, offset = 0, sort = "featured" } = opts;
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     let query = supabase
       .from("products")
       .select("*, variants(*), product_images(*)", { count: "exact" })
@@ -45,7 +45,7 @@ export async function getProducts(
 export async function getFeaturedProducts(limit = 6): Promise<ProductWithRelations[]> {
   if (!configured()) return [];
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("products")
       .select("*, variants(*), product_images(*)")
@@ -63,7 +63,7 @@ export async function getFeaturedProducts(limit = 6): Promise<ProductWithRelatio
 export async function getProductBySlug(slug: string): Promise<ProductWithRelations | null> {
   if (!configured()) return null;
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("products")
       .select("*, variants(*), product_images(*)")
@@ -80,7 +80,7 @@ export async function getProductBySlug(slug: string): Promise<ProductWithRelatio
 export async function getProductSlugs(): Promise<string[]> {
   if (!configured()) return [];
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("products")
       .select("slug")
@@ -95,7 +95,7 @@ export async function getProductSlugs(): Promise<string[]> {
 export async function getCollections(): Promise<CollectionRow[]> {
   if (!configured()) return [];
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("collections")
       .select("*")
@@ -113,7 +113,7 @@ export async function getCollectionBySlug(
 ): Promise<{ collection: CollectionRow; products: ProductWithRelations[] } | null> {
   if (!configured()) return null;
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("collections")
       .select("*")
