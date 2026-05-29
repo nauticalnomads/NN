@@ -620,3 +620,22 @@ script before cutover to pick up any catalogue changes.
 See migration `20260529130000_audit_log.sql`. `updateSettings` records actor + from→to for
 auto_fulfilment_enabled, fulfilment_dry_run, vat_enabled, shipping_mode; settings page shows
 the trail. Degrades gracefully until the table is created.
+
+### MED-5 — admin/social `<img>` → `next/image` ✅
+
+Replaced the two `<img>` tags in `/admin/social` with `next/image` (`unoptimized`, since the
+Drive thumbnail/redirect URLs aren't optimizer-friendly). Lint is now fully clean — **0
+warnings, 0 errors**.
+
+### MED-6 — Order confirmation live status poll ✅
+
+`/orders/[order]` is reached via the Stripe success redirect, but status flips to `paid` only
+when the webhook lands (we trust the webhook, not the redirect). Added `StatusPoll` client
+component: while not yet paid, it `router.refresh()`es every 3s (bounded to ~1 min) so the
+page updates from "confirming your payment…" to "thanks — that's in." with no manual reload.
+Stops once paid; bounded so a genuinely failed payment doesn't poll forever.
+
+### Audit log — verified live
+
+`audit_log` migration applied; verified table + insert path + ops-only RLS (anon blocked).
+Settings changes now record actor + from→to and surface in the settings trail.

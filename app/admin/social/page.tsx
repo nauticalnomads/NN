@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { listImages, driveImageUrl } from "@/lib/google-drive";
@@ -43,11 +44,17 @@ export default async function AdminSocial() {
           {images.map((img) => (
             <li key={img.id} className="rounded-sm border border-ink/10 p-3">
               {img.thumbnailLink && (
-                <img
-                  src={img.thumbnailLink}
-                  alt={img.name}
-                  className="aspect-square w-full rounded-sm object-cover"
-                />
+                <div className="relative aspect-square w-full overflow-hidden rounded-sm">
+                  {/* Drive thumbnails (lh3.googleusercontent.com) — unoptimized
+                      so we don't have to whitelist + run them through the optimizer. */}
+                  <Image
+                    src={img.thumbnailLink}
+                    alt={img.name}
+                    fill
+                    unoptimized
+                    className="object-cover"
+                  />
+                </div>
               )}
               <p className="mt-2 truncate font-mono text-caption text-ink/70">{img.name}</p>
               <form action={createDraft} className="mt-2">
@@ -67,9 +74,12 @@ export default async function AdminSocial() {
         {drafts.map((d) => (
           <li key={d.id} className="flex gap-5 rounded-sm border border-ink/10 p-4">
             {d.image_url && (
-              <img
+              <Image
                 src={d.image_url}
                 alt=""
+                width={96}
+                height={96}
+                unoptimized
                 className="h-24 w-24 shrink-0 rounded-sm object-cover"
               />
             )}
