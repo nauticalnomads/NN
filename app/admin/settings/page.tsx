@@ -1,6 +1,7 @@
 import { requireOps } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { updateSettings } from "./actions";
+import { ZoneEditor, type Zone } from "./ZoneEditor";
 
 export default async function AdminSettings() {
   await requireOps();
@@ -13,6 +14,7 @@ export default async function AdminSettings() {
     .maybeSingle();
   const s = (store as unknown as Record<string, unknown>) || {};
   const sh = (ship as unknown as Record<string, unknown>) || {};
+  const zones: Zone[] = Array.isArray(sh.flat_zones) ? (sh.flat_zones as Zone[]) : [];
 
   return (
     <div className="max-w-2xl">
@@ -51,6 +53,22 @@ export default async function AdminSettings() {
             { v: "flat", l: "Flat zone rates" },
           ]}
         />
+        <div>
+          <p className="font-mono text-caption tracking-wide text-ink/60 uppercase">
+            Flat shipping zones
+          </p>
+          <p className="mt-1 mb-3 font-mono text-caption text-ink/50">
+            Used when shipping mode is &quot;flat&quot;, and as the fallback when live POD quotes
+            fail in &quot;live&quot; mode.
+          </p>
+          <ZoneEditor initial={zones} />
+        </div>
+        <TextField
+          label="Make.com webhook URL (for social tool publishing)"
+          name="make_webhook_url"
+          defaultValue={(s.make_webhook_url as string) || ""}
+          placeholder="https://hook.make.com/…"
+        />
         <Textarea
           label="Brand voice (used by AI for captions & blog drafts)"
           name="brand_voice"
@@ -88,6 +106,30 @@ function Toggle({
         <span className="block font-body text-body text-ink">{label}</span>
         <span className="block font-mono text-caption text-ink/50">{help}</span>
       </span>
+    </label>
+  );
+}
+function TextField({
+  label,
+  name,
+  defaultValue,
+  placeholder = "",
+}: {
+  label: string;
+  name: string;
+  defaultValue: string;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="font-mono text-caption tracking-wide text-ink/60 uppercase">{label}</span>
+      <input
+        type="text"
+        name={name}
+        defaultValue={defaultValue}
+        placeholder={placeholder}
+        className="mt-2 block w-full rounded-sm border border-ink/20 bg-surface px-3 py-2 font-mono text-caption text-ink"
+      />
     </label>
   );
 }
