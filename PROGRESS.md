@@ -294,10 +294,36 @@ Storefront verified end-to-end against real data:
 4. ✅ Admin shipping-zone editor + Make.com webhook field
 5. ✅ Owner-alert wiring + `/admin/notifications` inbox
 6. ✅ `/admin/orders/[id]` detail + manual-fallback view + retry button
-7. ⏳ Retry-with-backoff for transient POD failures — NEXT
-8. ⏳ Stripe `charge.refunded` / `refund.updated` reconciliation
+7. ✅ Retry-with-backoff for transient POD failures
+8. ⏳ Stripe `charge.refunded` / `refund.updated` reconciliation — NEXT
 
 ---
+
+## Step 7 — Retry-with-backoff for transient POD failures ✅
+
+### Built
+
+Added to `lib/fulfilment.ts`:
+
+- **`MAX_RETRIES = 3`** (1 initial attempt + up to 2 retries; total max 4 POD calls per
+  provider per order). **Backoff: 1s → 2s → 4s.** Max possible sleep is 7s — well inside the
+  Cloudflare Workers ~30s limit.
+- **`isTransient(err)`** — classifies errors: 5xx + 429 HTTP status codes are transient
+  (retry); 4xx (bad address, variant not found, validation) are permanent (fail immediately,
+  no point retrying). Network/fetch errors (TypeError, AbortError) are treated as transient.
+  Detection is based on the throw format already used by `placePrintful` / `placePrintify`
+  (`"Printful 5xx: …"` / `"Printify 5xx: …"`).
+- Retry loop wraps the provider call; on transient error at attempt < MAX_RETRIES → sleeps
+  and retries. On permanent error or after exhausting retries → breaks and records the failure.
+- A `fulfilment_attempts` row is still recorded once per provider (after the loop), not per
+  retry attempt — the log stays clean. The error detail on a retried-then-failed row includes
+  the final error message.
+- `dry_run` mode bypasses the loop entirely (synthetic result as before).
+
+### Verified
+
+- `tsc --noEmit` clean.
+- `prettier --check .` clean.
 
 ## Step 6 — `/admin/orders/[id]` detail page ✅
 
