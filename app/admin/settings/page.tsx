@@ -17,6 +17,26 @@ export default async function AdminSettings() {
   const zones: Zone[] = Array.isArray(sh.flat_zones) ? (sh.flat_zones as Zone[]) : [];
   const prefs = (s.notification_prefs as Record<string, boolean> | null) || {};
 
+  // Recent settings-change audit trail (empty/absent if not yet migrated).
+  let audit: Array<{
+    id: string;
+    actor_email: string | null;
+    action: string;
+    detail: { from?: unknown; to?: unknown };
+    created_at: string;
+  }> = [];
+  try {
+    const { data } = await sb
+      .from("audit_log")
+      .select("id, actor_email, action, detail, created_at")
+      .like("action", "settings.%")
+      .order("created_at", { ascending: false })
+      .limit(15);
+    audit = (data as unknown as typeof audit) || [];
+  } catch {
+    audit = [];
+  }
+
   return (
     <div className="max-w-2xl">
       <h1 className="font-display text-display-2 tracking-tight text-ink">Settings</h1>
@@ -110,6 +130,27 @@ export default async function AdminSettings() {
           Save
         </button>
       </form>
+
+      {audit.length > 0 && (
+        <div className="mt-14">
+          <p className="font-mono text-caption tracking-wide text-ink/60 uppercase">
+            Recent settings changes
+          </p>
+          <ul className="mt-3 space-y-2">
+            {audit.map((a) => (
+              <li key={a.id} className="font-mono text-caption text-ink/70">
+                <span className="text-ink/40">
+                  {new Date(a.created_at).toLocaleString("en-GB")}
+                </span>{" "}
+                · {a.actor_email ?? "—"} set{" "}
+                <span className="text-ink">{a.action.replace("settings.", "")}</span> from{" "}
+                <span className="text-ink">{String(a.detail?.from)}</span> →{" "}
+                <span className="text-accent-sun">{String(a.detail?.to)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

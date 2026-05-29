@@ -29,8 +29,24 @@ function parseZones(raw: string | null): Zone[] | null {
 }
 
 export async function updateSettings(formData: FormData) {
-  await requireOps();
+  const actor = await requireOps();
   const sb = createServiceClient();
+
+  // Snapshot the sensitive fields before the write so we can audit-log changes.
+  const { data: prevStore } = await sb
+    .from("store_settings")
+    .select("auto_fulfilment_enabled, fulfilment_dry_run, vat_enabled")
+    .eq("id", true)
+    .maybeSingle();
+  const { data: prevShip } = await sb
+    .from("shipping_settings")
+    .select("mode")
+    .eq("id", true)
+    .maybeSingle();
+  const before = {
+    ...((prevStore as unknown as Record<string, unknown>) || {}),
+    shipping_mode: (prevShip as unknown as { mode?: string } | null)?.mode,
+  };
 
   const store = {
     id: true,
@@ -55,6 +71,32 @@ export async function updateSettings(formData: FormData) {
   const zones = parseZones(String(formData.get("flat_zones") || ""));
   if (zones) ship.flat_zones = zones;
   await sb.from("shipping_settings").upsert(ship as never);
+
+  // Audit-log changes to sensitive toggles (§B-07 #9). Best-effort: if the
+  // audit_log table isn't migrated yet, saving still succeeds.
+  const after: Record<string, unknown> = {
+    auto_fulfilment_enabled: store.auto_fulfilment_enabled,
+    fulfilment_dry_run: store.fulfilment_dry_run,
+    vat_enabled: store.vat_enabled,
+    shipping_mode: ship.mode,
+  };
+  const entries = Object.entries(after)
+    .filter(([k, v]) => before[k as keyof typeof before] !== v)
+    .map(([k, v]) => ({
+      actor_id: actor.id,
+      actor_email: actor.email,
+      action: `settings.${k}`,
+      detail: { from: before[k as keyof typeof before] ?? null, to: v },
+    }));
+  if (entries.length) {
+    await sb
+      .from("audit_log")
+      .insert(entries as never)
+      .then(
+        () => undefined,
+        () => undefined,
+      );
+  }
 
   revalidatePath("/admin/settings");
 }
