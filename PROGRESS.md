@@ -595,3 +595,28 @@ lists. Used in the journal post page.
 - Replace `<img>` with `<Image>` in `/admin/social` (the 2 remaining lint warnings).
 - Analytics + uptime monitoring.
 - (done — see HS-9 above) Customer accounts.
+
+### MED-3 — 301/308 redirect map from old Shopify URLs ✅
+
+`scripts/generate-redirects.mjs` (read-only, re-runnable) pulls every Shopify product +
+collection handle via the Admin API (client-credentials auth), matches products to our new
+slug by `source_id` (the full Shopify gid), and writes `lib/redirects.json`, wired into
+`next.config.mjs` `redirects()`.
+
+Result: 62 redirects. All 268 migrated products kept their Shopify handle as their slug, so
+they need NO redirect (handles preserved). The map covers: the 9 dropped JetPrint watches →
+`/shop`, 44 old collection URLs → `/shop` (no per-collection equivalents migrated), and 9
+static page paths (about/contact/shipping/size-guide) → their new pages. Verified live:
+`/collections/accessories`, `/products/rose-metal-watch`, `/pages/about` all 308-redirect to
+the right targets; a live product (`/products/mens-nomad-tee-green`) serves 200 unaffected.
+
+Note: Next's `permanent: true` emits **308** (Permanent Redirect), which Google treats
+identically to 301 for SEO/link-equity. True 301 status would require middleware on the
+storefront hot path (perf cost); 308 is the idiomatic, zero-overhead choice. Re-run the
+script before cutover to pick up any catalogue changes.
+
+### MED-4 — Kill-switch / settings audit log ✅ (code; needs the audit_log migration run)
+
+See migration `20260529130000_audit_log.sql`. `updateSettings` records actor + from→to for
+auto_fulfilment_enabled, fulfilment_dry_run, vat_enabled, shipping_mode; settings page shows
+the trail. Degrades gracefully until the table is created.
