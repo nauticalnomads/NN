@@ -96,9 +96,12 @@ export async function buildPrintifyMap(progress = () => {}) {
   const map = new Map();
   let page = 1;
   while (true) {
-    const res = await fetchWithRetry(`${PRINTIFY_BASE}/shops/${shop}/products.json?limit=50&page=${page}`, {
-      headers: { Authorization: `Bearer ${key}` },
-    });
+    const res = await fetchWithRetry(
+      `${PRINTIFY_BASE}/shops/${shop}/products.json?limit=50&page=${page}`,
+      {
+        headers: { Authorization: `Bearer ${key}` },
+      },
+    );
     if (!res.ok) break;
     const j = await res.json();
     const data = j?.data ?? [];

@@ -40,15 +40,19 @@ export async function getAccessToken() {
     );
   }
 
-  const res = await fetchWithRetry(`https://${domain}/admin/oauth/access_token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({
-      client_id: id,
-      client_secret: secret,
-      grant_type: "client_credentials",
-    }),
-  }, { label: "shopify oauth" });
+  const res = await fetchWithRetry(
+    `https://${domain}/admin/oauth/access_token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        client_id: id,
+        client_secret: secret,
+        grant_type: "client_credentials",
+      }),
+    },
+    { label: "shopify oauth" },
+  );
   if (!res.ok) {
     throw new Error(`Shopify auth failed (${res.status}): ${await res.text()}`);
   }

@@ -11,6 +11,7 @@ type OrderItem = {
   id: string;
   order_id: string;
   provider: "printful" | "printify" | null;
+  provider_product_id: string | null;
   provider_variant_id: string | null;
   quantity: number;
   unit_price: number;
@@ -72,7 +73,7 @@ async function placePrintify(order: Order, items: OrderItem[]) {
     external_id: order.id,
     label: `NN ${order.id.slice(0, 8)}`,
     line_items: items.map((i) => ({
-      product_id: i.provider_variant_id, // not strictly correct — see below
+      product_id: i.provider_product_id,
       variant_id: Number(i.provider_variant_id),
       quantity: i.quantity,
     })),
@@ -126,7 +127,9 @@ export async function autoFulfilOrder(orderId: string) {
 
   const { data: itemsData } = await sb
     .from("order_items")
-    .select("id, order_id, provider, provider_variant_id, quantity, unit_price")
+    .select(
+      "id, order_id, provider, provider_product_id, provider_variant_id, quantity, unit_price",
+    )
     .eq("order_id", orderId);
   const items = (itemsData as unknown as OrderItem[]) ?? [];
 

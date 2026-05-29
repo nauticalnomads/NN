@@ -18,6 +18,7 @@ export type ShippingAddress = {
 
 export type CartLine = {
   provider: "printful" | "printify" | null;
+  provider_product_id: string | null; // needed for Printify shipping quote + fulfilment
   provider_variant_id: string | null;
   quantity: number;
 };
@@ -88,17 +89,46 @@ async function printfulQuote(items: CartLine[], addr: ShippingAddress): Promise<
 }
 
 async function printifyQuote(items: CartLine[], addr: ShippingAddress): Promise<number | null> {
-  void addr;
-  const variants = items.filter((i) => i.provider === "printify" && i.provider_variant_id);
+  const lines = items.filter(
+    (i) => i.provider === "printify" && i.provider_product_id && i.provider_variant_id,
+  );
   const shop = process.env.PRINTIFY_SHOP_ID;
-  if (!variants.length || !process.env.PRINTIFY_API_KEY || !shop) return null;
+  if (!lines.length || !process.env.PRINTIFY_API_KEY || !shop) return null;
   try {
-    // Printify cost-estimate per product is in /shops/{id}/orders/shipping.json
-    // — needs a line_items shape with product_id + variant_id. We don't track
-    // printify provider_product_id per-line here, so this returns null and
-    // checkout falls back to flat-zone for Printify items until we plumb that
-    // through. Logged so the admin sees the gap.
-    return null;
+    const [first = "", ...rest] = (addr.name ?? "").split(" ");
+    const res = await fetch(`https://api.printify.com/v1/shops/${shop}/orders/shipping.json`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.PRINTIFY_API_KEY ?? ""}`,
+      },
+      body: JSON.stringify({
+        line_items: lines.map((l) => ({
+          product_id: l.provider_product_id,
+          variant_id: Number(l.provider_variant_id),
+          quantity: l.quantity,
+        })),
+        address_to: {
+          first_name: first,
+          last_name: rest.join(" "),
+          email: "shipping-quote@example.invalid",
+          country: addr.country,
+          region: addr.state ?? "",
+          address1: addr.line1 ?? "",
+          address2: addr.line2 ?? "",
+          city: addr.city ?? "",
+          zip: addr.postal_code ?? "",
+        },
+      }),
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as Record<string, number>;
+    // Response: { standard, express, priority, printify_express, economy } in cents.
+    const candidates = ["standard", "economy", "express", "priority", "printify_express"]
+      .map((k) => j[k])
+      .filter((n): n is number => typeof n === "number" && n > 0);
+    if (!candidates.length) return null;
+    return Math.min(...candidates) / 100; // cheapest, in major units
   } catch {
     return null;
   }

@@ -269,6 +269,7 @@ DB: 268 products · 1,155 variants · 2,360 image rows
 ```
 
 Run notes:
+
 - First round flagged 3 transient Supabase REST failures (`upsert failed`).
   Fixed by wrapping `upsertProduct()` in retry; second round completed all 268
   cleanly with zero flags.
@@ -280,6 +281,7 @@ Run notes:
   "page changed from static to dynamic" conflict.
 
 Storefront verified end-to-end against real data:
+
 - `/` 200 · `/shop` 200 · `/sitemap.xml` 200 · `/admin` 307 (gate)
 - `/products/<real-slug>` 200, renders title + £-formatted price + Shopify CDN image
 - Build succeeds, all 268 product pages + 0 collections SSG'd with 5 min ISR
