@@ -59,17 +59,25 @@ export default async function AdminProducts() {
                   {p.base_cost != null ? formatPrice(p.base_cost, p.currency) : "—"}
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <form action={setProductStatus}>
-                    <input type="hidden" name="product_id" value={p.id} />
-                    <input
-                      type="hidden"
-                      name="status"
-                      value={p.status === "published" ? "draft" : "published"}
-                    />
-                    <button className="rounded-sm border border-ink/20 px-3 py-1 font-mono text-xs tracking-widest text-ink/70 uppercase hover:border-accent-sun hover:text-accent-sun">
-                      {p.status === "published" ? "Unpublish" : "Publish"}
-                    </button>
-                  </form>
+                  <div className="flex items-center justify-end gap-3">
+                    <Link
+                      href={`/admin/products/${p.id}`}
+                      className="font-mono text-xs tracking-widest text-ink/70 uppercase no-underline hover:text-accent-sun"
+                    >
+                      Edit
+                    </Link>
+                    <form action={setProductStatus}>
+                      <input type="hidden" name="product_id" value={p.id} />
+                      <input
+                        type="hidden"
+                        name="status"
+                        value={p.status === "published" ? "draft" : "published"}
+                      />
+                      <button className="rounded-sm border border-ink/20 px-3 py-1 font-mono text-xs tracking-widest text-ink/70 uppercase hover:border-accent-sun hover:text-accent-sun">
+                        {p.status === "published" ? "Unpublish" : "Publish"}
+                      </button>
+                    </form>
+                  </div>
                 </td>
               </tr>
             ))}

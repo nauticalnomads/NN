@@ -519,7 +519,19 @@ Fixed a real money bug + added defence-in-depth to the guest refund flow
 **Still open:** full customer accounts (login + order-history scoping + welcome email) remains
 the larger separate effort; this hardening covers the immediate money-touching risk.
 
+### HS-8 — Product edit page + on-sale blog trigger ✅
+
+Built `/admin/products/[id]` — edit price, compare-at/was price, status, featured, SEO.
+New `updateProduct` action fires the blog auto-queue on **two** transitions now:
+draft→published (`auto_new_product`) and newly-on-sale, i.e. price drops below
+compare_at_price (`auto_on_sale`). De-dup is a backstop. "Edit" link added to the
+products list. This also gives the admin its first real product-edit capability
+(previously read-only + publish toggle). Verified the full on-sale chain against a
+throwaway product on the live DB: drop below compare-at → 1 draft queued; re-save while
+on sale → no re-fire; de-dup held.
+
+The §B-13 blog auto-queue (both triggers) is now complete.
+
 ### Still open (high-severity)
 
-- On-sale blog trigger (needs product price-edit UI).
 - Full customer accounts (login + proper per-account order scoping) — architecturally largest.
