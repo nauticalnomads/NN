@@ -1,6 +1,5 @@
 import { requireOps } from "@/lib/auth";
-import { createServiceClient } from "@/lib/supabase/service";
-import { getStripe } from "@/lib/stripe";
+import { getFinancialSummary } from "@/lib/financial";
 import { formatPrice } from "@/lib/format";
 
 export default async function FinancialPage({
@@ -15,43 +14,14 @@ export default async function FinancialPage({
   const from = sp.from ? new Date(sp.from) : monthStart;
   const to = sp.to ? new Date(sp.to) : now;
 
-  let revenue = 0,
-    fees = 0,
-    refunds = 0,
-    cogs = 0;
-  let stripeUnreachable = false;
+  const { revenue, fees, refunds, cogs, profit, stripeUnreachable } = await getFinancialSummary(
+    from,
+    to,
+  );
 
-  // Pull Stripe data for the period.
-  try {
-    const stripe = getStripe();
-    const balance = await stripe.balanceTransactions.list({
-      created: { gte: Math.floor(from.getTime() / 1000), lte: Math.floor(to.getTime() / 1000) },
-      limit: 100,
-    });
-    for (const t of balance.data) {
-      if (t.type === "charge") {
-        revenue += t.amount / 100;
-        fees += (t.fee ?? 0) / 100;
-      }
-      if (t.type === "refund") refunds += Math.abs(t.amount) / 100;
-    }
-  } catch {
-    stripeUnreachable = true;
-  }
-
-  // Pull COGS from local order_items in the period.
-  const sb = createServiceClient();
-  const { data } = await sb
-    .from("order_items")
-    .select("base_cost, quantity, created_at")
-    .gte("created_at", from.toISOString())
-    .lte("created_at", to.toISOString());
-  const items = (data as unknown as Array<{ base_cost: number | null; quantity: number }>) || [];
-  for (const i of items) if (i.base_cost) cogs += i.base_cost * i.quantity;
-
-  const profit = revenue - cogs - fees - refunds;
   const fmt = (n: number) => formatPrice(n, "GBP");
   const csvHref = `/api/admin/financial.csv?from=${from.toISOString()}&to=${to.toISOString()}`;
+  const pdfHref = `/api/admin/financial.pdf?from=${from.toISOString()}&to=${to.toISOString()}`;
 
   return (
     <div className="max-w-3xl">
@@ -86,6 +56,12 @@ export default async function FinancialPage({
           className="font-mono text-caption tracking-widest text-ink uppercase underline-offset-4 hover:underline"
         >
           Export CSV
+        </a>
+        <a
+          href={pdfHref}
+          className="font-mono text-caption tracking-widest text-ink uppercase underline-offset-4 hover:underline"
+        >
+          Export PDF
         </a>
       </form>
 

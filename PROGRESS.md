@@ -491,8 +491,17 @@ draft → published transition fires `autoQueueForProduct(id, "auto_new_product"
 insert path against the live DB (correct columns). **On-sale trigger still pending** —
 needs a product price-edit UI, which doesn't exist yet.
 
+### HS-6 — PDF export of financial report ✅
+
+Extracted the dashboard's Stripe+COGS calc into `lib/financial.ts`
+`getFinancialSummary(from, to)` (single source of truth — page + exports share it).
+Added `lib/pdf.ts` — a dependency-free single-page PDF builder (byte-accurate xref,
+Helvetica text) that works on Cloudflare Workers where puppeteer/heavy libs can't.
+New route `app/api/admin/financial.pdf` (ops only) + "Export PDF" link on the page.
+Output validated: `file(1)` reports "PDF document, version 1.4, 1 page(s)", xref offsets
+byte-accurate. Carries the estimate disclaimer.
+
 ### Still open (high-severity)
 
 - On-sale blog trigger (needs product price-edit UI).
-- PDF export of financial report.
 - Customer accounts / refund auth (UUID-as-bearer is unsafe) — architecturally largest.
