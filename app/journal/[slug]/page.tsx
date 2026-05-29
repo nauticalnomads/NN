@@ -4,6 +4,7 @@ import { Container } from "@/components/Container";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { createClient } from "@/lib/supabase/server";
 import { absoluteUrl, site } from "@/lib/site";
+import { renderMarkdown } from "@/lib/markdown";
 
 export const revalidate = 300;
 
@@ -70,8 +71,8 @@ export default async function Post({ params }: { params: Promise<{ slug: string 
             {new Date(p.published_at).toLocaleDateString()}
           </p>
         )}
-        <div className="mt-8 whitespace-pre-line font-body text-body leading-relaxed text-ink/85">
-          {p.body}
+        <div className="mt-8 font-body text-body leading-relaxed text-ink/85">
+          {renderMarkdown(p.body ?? "")}
         </div>
       </article>
     </Container>

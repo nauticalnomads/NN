@@ -535,3 +535,33 @@ The §B-13 blog auto-queue (both triggers) is now complete.
 ### Still open (high-severity)
 
 - Full customer accounts (login + proper per-account order scoping) — architecturally largest.
+
+---
+
+## Medium / polish items
+
+### MED-1 — Financial report: Stripe pagination ✅
+
+`lib/financial.ts` was capped at `limit: 100` balance transactions — date ranges with
+more were silently undercounting revenue/fees/refunds. Now uses
+`.autoPagingToArray({ limit: 5000 })` (bounded for the Workers time limit). Verified the
+API call + pagination works against the live test account.
+
+### MED-2 — Journal markdown rendering ✅
+
+`/journal/[slug]` rendered the body as `whitespace-pre-line`, so readers saw raw
+`**markdown**`. Added `lib/markdown.tsx` — a dependency-free, XSS-safe markdown→React
+renderer (renders to elements, never `dangerouslySetInnerHTML`; links restricted to
+http/mailto). Covers headings, paragraphs, bold/italic/code, links, ordered/unordered
+lists. Used in the journal post page.
+
+### Still open (medium / polish)
+
+- Variant-specific image on Stripe line items.
+- Social scheduling.
+- Order page client-poll for status flip.
+- 301 redirect map from Shopify URLs (needs the old URL list).
+- Audit log for kill-switch toggle.
+- Replace `<img>` with `<Image>` in `/admin/social` (the 2 remaining lint warnings).
+- Analytics + uptime monitoring.
+- Full customer accounts (high-severity; architecturally largest).

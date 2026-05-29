@@ -23,11 +23,15 @@ export async function getFinancialSummary(from: Date, to: Date): Promise<Financi
 
   try {
     const stripe = getStripe();
-    const balance = await stripe.balanceTransactions.list({
-      created: { gte: Math.floor(from.getTime() / 1000), lte: Math.floor(to.getTime() / 1000) },
-      limit: 100,
-    });
-    for (const t of balance.data) {
+    // Auto-paginate so date ranges with > 100 transactions aren't undercounted.
+    // Capped at 5000 txns to stay well inside the Workers time limit.
+    const txns = await stripe.balanceTransactions
+      .list({
+        created: { gte: Math.floor(from.getTime() / 1000), lte: Math.floor(to.getTime() / 1000) },
+        limit: 100,
+      })
+      .autoPagingToArray({ limit: 5000 });
+    for (const t of txns) {
       if (t.type === "charge") {
         revenue += t.amount / 100;
         fees += (t.fee ?? 0) / 100;
