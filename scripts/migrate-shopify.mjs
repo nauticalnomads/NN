@@ -11,6 +11,9 @@
  *     content — half the images and all the text were edited in Shopify
  *     after the original import and have diverged from POD content.
  *
+ * JetPrint products (vendor = "JetPrint Fulfillment") are EXCLUDED at source —
+ * scope decision; they will not appear on the new site at all.
+ *
  * Provider detection (no metafields required — confirmed empirically against
  * this catalogue):
  *   1) Printful sync product whose external_id matches Shopify's
@@ -20,8 +23,8 @@
  *   2) Else Printify product whose external.id matches → provider=printify,
  *      provider_product_id = product.id, per-variant provider_variant_id =
  *      variant.id, base_cost = variant.cost / 100.
- *   3) Else vendor == "JetPrint Fulfillment" → provider=jetprint, IDs/cost null
- *      (no JetPrint API integration; flagged for manual fulfilment).
+ *   3) Else SKU pattern `{sync_product_id}_{catalog_variant_id}` → printful
+ *      (recovers products with broken sync linkage).
  *   4) Else provider=null (flagged as draft, "no provider mapping").
  *
  * Image-alt fallback: when Shopify alt is empty OR looks like a URL, fall back
@@ -40,12 +43,7 @@
 import { writeFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { iterateProducts } from "./lib/shopify.mjs";
-import {
-  buildPrintfulMap,
-  buildPrintifyMap,
-  buildJetprintMap,
-  printfulCatalogCost,
-} from "./lib/providers.mjs";
+import { buildPrintfulMap, buildPrintifyMap, printfulCatalogCost } from "./lib/providers.mjs";
 
 // ── args ─────────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -125,7 +123,7 @@ function buildSku(product, variant, seq) {
 }
 
 // Pick provider + IDs for one Shopify product/variant. ONLY mapping fields.
-function detectMapping(shopifyProduct, shopifyVariant, pfMap, pyMap, jpMap) {
+function detectMapping(shopifyProduct, shopifyVariant, pfMap, pyMap) {
   const productLegacy = legacyId(shopifyProduct.id);
   const variantLegacy = legacyId(shopifyVariant.id);
 
@@ -152,28 +150,7 @@ function detectMapping(shopifyProduct, shopifyVariant, pfMap, pyMap, jpMap) {
       base_cost_cents: pv?.cost ?? null,
     };
   }
-  // 3) JetPrint — API match by Shopify product id, with variant + cost if shape known.
-  const jp = jpMap.get(productLegacy);
-  if (jp) {
-    // JetPrint variant + cost field names vary across API versions.
-    const variants = jp.variants ?? jp.product_variants ?? jp.skus ?? jp.product?.variants ?? [];
-    const jv =
-      variants.find(
-        (v) =>
-          String(v.shopify_variant_id ?? v.external_variant_id ?? v.external_id ?? "") ===
-            String(variantLegacy) || v.sku === shopifyVariant.sku,
-      ) || variants[0];
-    const cost = jv?.cost ?? jv?.base_cost ?? jv?.price?.cost ?? null;
-    return {
-      provider: "jetprint",
-      provider_product_id: String(jp.id ?? jp.product_id ?? jp.jetprint_product_id ?? "") || null,
-      provider_variant_id:
-        String(jv?.id ?? jv?.variant_id ?? jv?.jetprint_variant_id ?? "") || null,
-      base_cost_cents: typeof cost === "number" && cost > 1 ? cost : null, // cents
-      base_cost_units: typeof cost === "number" && cost <= 1 ? null : null,
-    };
-  }
-  // 4) Printful SKU-pattern fallback. The Printful Shopify app writes variant
+  // 3) Printful SKU-pattern fallback. The Printful Shopify app writes variant
   //    SKUs in the form `{sync_product_id}_{catalog_variant_id}` (e.g.
   //    "8409906_11546"). When the sync linkage is broken or stale, we can
   //    still recover the catalog variant_id (drives base_cost + fulfilment).
@@ -185,12 +162,7 @@ function detectMapping(shopifyProduct, shopifyVariant, pfMap, pyMap, jpMap) {
       provider_variant_id: skuMatch[2], // catalog variant_id ⇒ what fulfilment needs
     };
   }
-  // 5) JetPrint fallback by vendor (no API match — still mark as jetprint so
-  //    the owner can fulfil manually).
-  if ((shopifyProduct.vendor || "").toLowerCase().includes("jetprint")) {
-    return { provider: "jetprint" };
-  }
-  // 6) Unknown.
+  // 4) Unknown.
   return { provider: null };
 }
 
@@ -200,12 +172,11 @@ function validateProduct(p, normalized) {
     issues.push("description thin or missing");
   if ((normalized.images?.length ?? 0) === 0) issues.push("no images");
   if (!normalized.variants?.length) issues.push("no variants");
-  // Provider mapping is a product-level property. For printful/printify we
-  // also need per-variant provider_variant_id to fulfil. JetPrint products
-  // without per-variant IDs are still flaggable as they'll need manual fulfil.
+  // Provider mapping is a product-level property; per-variant
+  // provider_variant_id is needed by fulfilment on every line.
   if (!normalized.provider) {
     issues.push("no provider mapping");
-  } else if (normalized.provider !== "jetprint") {
+  } else {
     for (const v of normalized.variants ?? []) {
       if (!v.provider_variant_id) issues.push(`variant ${v.sku || "?"} has no provider_variant_id`);
     }
@@ -245,7 +216,7 @@ async function uploadImage(client, productSlug, idx, srcUrl, alt) {
 }
 
 // ── normalise one Shopify product ────────────────────────────────────────────
-async function normalise(p, seq, sb, pfMap, pyMap, jpMap) {
+async function normalise(p, seq, sb, pfMap, pyMap) {
   const slug = slugify(p.handle || p.title);
   const description = htmlToText(p.descriptionHtml);
 
@@ -257,20 +228,16 @@ async function normalise(p, seq, sb, pfMap, pyMap, jpMap) {
 
   for (const v of p.variants?.nodes ?? []) {
     vIdx++;
-    const m = detectMapping(p, v, pfMap, pyMap, jpMap);
+    const m = detectMapping(p, v, pfMap, pyMap);
     if (vIdx === 1) {
       productProvider = m.provider;
       productProviderId = m.provider_product_id ?? null;
     }
     // base_cost:
-    //   Printify  → variant.cost is already in cents
-    //   JetPrint  → variant.cost is typically in cents too (when API returns it)
-    //   Printful  → catalog lookup, returns major units (£)
+    //   Printify  → variant.cost is already in cents (in-band)
+    //   Printful  → catalog lookup, returns major units (£), cached per variant_id
     let baseCost = null;
-    if (
-      (m.provider === "printify" || m.provider === "jetprint") &&
-      typeof m.base_cost_cents === "number"
-    ) {
+    if (m.provider === "printify" && typeof m.base_cost_cents === "number") {
       baseCost = m.base_cost_cents / 100;
     } else if (m.provider === "printful" && !SKIP_COSTS && m.provider_variant_id) {
       baseCost = await printfulCatalogCost(m.provider_variant_id);
@@ -377,18 +344,6 @@ async function upsertProduct(sb, normalized, autoPublish) {
         tryRow.slug = `${productRow.slug}-${suffix}`;
         continue;
       }
-      // Graceful fallback when the `jetprint` enum value hasn't been migrated
-      // yet — store as unmapped so the run completes. A re-run after the SQL
-      // is applied picks them up correctly.
-      if (
-        insErr.code === "22P02" &&
-        (insErr.message || "").includes("jetprint") &&
-        tryRow.provider === "jetprint"
-      ) {
-        tryRow.provider = null;
-        tryRow.provider_product_id = null;
-        continue;
-      }
       throw insErr;
     }
   }
@@ -405,8 +360,7 @@ async function upsertProduct(sb, normalized, autoPublish) {
       const { error } = await sb.from("variants").update(vRow).eq("id", ev.id);
       if (error) throw error;
     } else {
-      // SKU collision guard (variants table has no provider column → no
-      // jetprint enum fallback needed here).
+      // SKU collision guard — suffix the SKU and retry on unique-violation.
       const tryRow = { ...v, product_id: productId };
       let suffix = 1;
       while (true) {
@@ -439,32 +393,34 @@ async function main() {
   const sb = DRY_RUN ? null : supa();
 
   console.log("Building POD lookup maps…");
-  const [pfMap, pyMap, jpMap] = await Promise.all([
+  const [pfMap, pyMap] = await Promise.all([
     buildPrintfulMap((m) => process.stdout.write(`\r  ${m}    `)),
     buildPrintifyMap(),
-    buildJetprintMap(),
   ]);
   process.stdout.write("\n");
   console.log(`  Printful sync products: ${pfMap.size}`);
   console.log(`  Printify products:      ${pyMap.size}`);
-  console.log(
-    `  JetPrint products:      ${jpMap.size}${jpMap.size === 0 ? "  (no API key or no products)" : ""}`,
-  );
   console.log();
 
   const report = {
     total: 0,
     autoPublished: 0,
     flagged: 0,
-    byProvider: { printful: 0, printify: 0, jetprint: 0, unmapped: 0 },
+    byProvider: { printful: 0, printify: 0, unmapped: 0 },
     flags: [],
+    skipped_jetprint: 0,
   };
 
   let seq = 0;
   for await (const p of iterateProducts()) {
+    // Filter JetPrint at source — scope decision (no JetPrint integration).
+    if ((p.vendor || "").toLowerCase().includes("jetprint")) {
+      report.skipped_jetprint++;
+      continue;
+    }
     seq++;
     if (LIMIT && seq > LIMIT) break;
-    const normalized = await normalise(p, seq, sb, pfMap, pyMap, jpMap);
+    const normalized = await normalise(p, seq, sb, pfMap, pyMap);
     const issues = validateProduct(p, normalized);
     const autoPublish = issues.length === 0;
 
@@ -503,14 +459,14 @@ async function main() {
   const lines = [
     `# Migration report${DRY_RUN ? " (DRY RUN)" : ""}`,
     "",
-    `- Total products: **${report.total}**`,
+    `- Total products considered: **${report.total}**`,
     `- Auto-published (clean): **${report.autoPublished}**`,
     `- Flagged as drafts: **${report.flagged}**`,
+    `- Skipped (JetPrint at source): **${report.skipped_jetprint}**`,
     "",
     `## Provider breakdown`,
     `- Printful: **${report.byProvider.printful}**`,
     `- Printify: **${report.byProvider.printify}**`,
-    `- JetPrint: **${report.byProvider.jetprint}**`,
     `- Unmapped: **${report.byProvider.unmapped}**`,
     "",
     `## Flagged products`,
@@ -530,8 +486,9 @@ async function main() {
     `Clean: ${report.autoPublished} · Flagged: ${report.flagged} · Total: ${report.total}`,
   );
   console.log(
-    `By provider — printful=${report.byProvider.printful}, printify=${report.byProvider.printify}, jetprint=${report.byProvider.jetprint}, unmapped=${report.byProvider.unmapped}\n`,
+    `By provider — printful=${report.byProvider.printful}, printify=${report.byProvider.printify}, unmapped=${report.byProvider.unmapped}`,
   );
+  console.log(`Skipped (JetPrint at source): ${report.skipped_jetprint}\n`);
 }
 
 main().catch((err) => {

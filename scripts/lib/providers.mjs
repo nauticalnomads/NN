@@ -87,62 +87,6 @@ export async function buildPrintfulMap(progress = () => {}) {
   return map;
 }
 
-// ── JetPrint ─────────────────────────────────────────────────────────────────
-// JetPrint API docs: https://docs.jetprintapp.com/  (Bearer auth).
-// Returns Map<shopifyLegacyProductId(string), jetprintProduct>. The exact
-// product shape (variant id field name, cost units) may vary by API version;
-// the migration accesses fields defensively and degrades to provider-only
-// mapping if anything is missing.
-const JETPRINT_BASE = "https://api.jetprintapp.com";
-
-function jetprintHeaders() {
-  const key = process.env.JETPRINT_API_KEY;
-  return key ? { Authorization: `Bearer ${key}` } : null;
-}
-
-export async function buildJetprintMap(progress = () => {}) {
-  const h = jetprintHeaders();
-  if (!h) return new Map();
-  const map = new Map();
-  // Common JetPrint pattern: paginated product list with shopify_product_id.
-  // Tries both /open-api/v1/products and /open-api/v2/products in case the
-  // tenant is on a different API version.
-  const paths = ["/open-api/v1/products", "/open-api/v2/products"];
-  for (const path of paths) {
-    try {
-      let page = 1;
-      let any = false;
-      while (true) {
-        const res = await fetch(`${JETPRINT_BASE}${path}?page=${page}&limit=100`, { headers: h });
-        if (!res.ok) break;
-        const j = await res.json();
-        // Accept either {data: [...]} or {result: [...]} or [...]
-        const items = j?.data ?? j?.result ?? (Array.isArray(j) ? j : []);
-        if (!items.length) break;
-        any = true;
-        for (const it of items) {
-          // The Shopify product id can live under several keys depending on
-          // the API version — try the common ones.
-          const ext =
-            it.shopify_product_id ??
-            it.external_product_id ??
-            it.external_id ??
-            it?.shopify?.product_id ??
-            null;
-          if (ext) map.set(String(ext), it);
-        }
-        progress(`JetPrint list… ${map.size}`);
-        if (items.length < 100) break;
-        page++;
-      }
-      if (any) return map; // first working path wins
-    } catch {
-      /* try next path */
-    }
-  }
-  return map;
-}
-
 // ── Printify ─────────────────────────────────────────────────────────────────
 export async function buildPrintifyMap(progress = () => {}) {
   const key = process.env.PRINTIFY_API_KEY;

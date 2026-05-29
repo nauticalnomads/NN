@@ -10,7 +10,7 @@ import { printfulHeaders } from "@/lib/shipping-printful";
 type OrderItem = {
   id: string;
   order_id: string;
-  provider: "printful" | "printify" | "jetprint" | null;
+  provider: "printful" | "printify" | null;
   provider_variant_id: string | null;
   quantity: number;
   unit_price: number;
@@ -174,9 +174,7 @@ export async function autoFulfilOrder(orderId: string) {
             ? await placePrintful(order, group)
             : provider === "printify"
               ? await placePrintify(order, group)
-              : provider === "jetprint"
-                ? { providerOrderId: `MANUAL-${orderId.slice(0, 8)}` }
-                : { providerOrderId: `UNMAPPED-${orderId.slice(0, 8)}` };
+              : { providerOrderId: `UNMAPPED-${orderId.slice(0, 8)}` };
         providerOrderId = placed.providerOrderId;
       } catch (err) {
         errMsg = err instanceof Error ? err.message : String(err);

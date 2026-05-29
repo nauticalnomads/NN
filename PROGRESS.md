@@ -226,12 +226,39 @@ Discovered two schema/code mismatches that the dry-run didn't surface (dry-run n
 Both fixed. Migration restarted. Idempotent on `(source, source_id)` so orphans get updated
 in place rather than duplicated. Real-run report to be appended once complete.
 
-### Next step (launch-blocker order from audit)
+---
 
-After the migration run + visual verification at `/admin/products` and `/shop`:
+## Session 03d — Scope reduction: drop JetPrint entirely
 
-1. ✅ Migration (in progress here)
-2. ⏳ JetPrint integration (real `placeJetprint()` + end-to-end test)
+Owner decision after the audit: the 9 JetPrint watches won't appear on the new
+site. Auto-fulfilment scope is now Printful + Printify only (both with real,
+working APIs).
+
+Removed:
+
+- 9 JetPrint product rows + their variants/images + storage folders (deleted live).
+- `jetprint` value from the `pod_provider` enum (migration
+  `20260528000000_drop_jetprint_provider.sql`, idempotent + safety-checked).
+- `buildJetprintMap()` from `scripts/lib/providers.mjs`.
+- JetPrint detection cases from `detectMapping()` in the migration script.
+- JetPrint case from `lib/fulfilment.ts` (the `MANUAL-…` placeholder).
+- `jetprint` from the `provider` union in `lib/shipping.ts`, `lib/fulfilment.ts`,
+  `lib/database.types.ts`.
+- `JETPRINT_*` env vars from `.env.local` (and never added to `.env.example`).
+- RUNBOOK mentions.
+- Audit launch-blocker #2 (JetPrint) is now closed by removal.
+
+Added:
+
+- Source filter in the migration loop — vendor matching `jetprint` is skipped
+  before normalisation runs, so the data never touches the DB.
+- Validation simplified (no jetprint special-case).
+- Report counts include a "Skipped (JetPrint at source)" total for transparency.
+
+### Updated launch-blocker order from audit
+
+1. ✅ Migration (in progress)
+2. ~~JetPrint integration~~ (closed by removal)
 3. ⏳ Printify live shipping
 4. ⏳ Admin shipping-zone editor
 5. ⏳ Owner-alert wiring + `/admin/notifications` inbox

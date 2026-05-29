@@ -17,7 +17,7 @@ export type ShippingAddress = {
 };
 
 export type CartLine = {
-  provider: "printful" | "printify" | "jetprint" | null;
+  provider: "printful" | "printify" | null;
   provider_variant_id: string | null;
   quantity: number;
 };
@@ -28,7 +28,7 @@ export type Quote = {
   rate: number;
   zone: string;
   mode: "live" | "flat";
-  per_provider?: { printful?: number; printify?: number; jetprint?: number };
+  per_provider?: { printful?: number; printify?: number };
   failures?: string[];
 };
 
@@ -145,8 +145,6 @@ export async function quoteShipping(
   const [pf, py] = await Promise.all([printfulQuote(lines, addr), printifyQuote(lines, addr)]);
   if (pf === null && lines.some((l) => l.provider === "printful")) failures.push("printful");
   if (py === null && lines.some((l) => l.provider === "printify")) failures.push("printify");
-  const jetprintItems = lines.some((l) => l.provider === "jetprint");
-  if (jetprintItems) failures.push("jetprint (no API)");
 
   if (failures.length) {
     const f = await flatQuote(addr);

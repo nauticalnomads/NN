@@ -134,7 +134,6 @@ platform. Test in this order; each item assumes the ones above pass.
 
 - Export financial CSV for the accountant.
 - Check for unmapped products (`/admin/products` → filter `provider = null`).
-- Review JetPrint products' `compare_at_price` validity.
 
 ### Quarterly
 
@@ -149,7 +148,7 @@ The migration is idempotent. Re-run it after:
 
 - New products added in Shopify (until Shopify is decommissioned).
 - Provider mapping corrected on the POD side.
-- A `compare_at_price` was reversed on a flagged JetPrint watch.
+- A `compare_at_price` was reversed on a flagged product.
 
 ```bash
 # Dry run first to see what'll change
