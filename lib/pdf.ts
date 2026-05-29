@@ -7,14 +7,11 @@ type Line = { text: string; size?: number; gap?: number };
 
 function escapePdfText(s: string): string {
   // Escape characters special to PDF string literals; drop non-Latin1.
-  return (
-    s
-      .replace(/\\/g, "\\\\")
-      .replace(/\(/g, "\\(")
-      .replace(/\)/g, "\\)")
-      // eslint-disable-next-line no-control-regex
-      .replace(/[^\x20-\x7E]/g, "")
-  );
+  return s
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)")
+    .replace(/[^\x20-\x7E]/g, "");
 }
 
 export function simplePdf(lines: Line[]): Uint8Array {
