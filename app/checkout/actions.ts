@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { quoteShipping, type ShippingAddress, type CartLine } from "@/lib/shipping";
 import type { CartItem } from "@/components/cart/CartProvider";
 import { absoluteUrl } from "@/lib/site";
+import { getCustomer } from "@/lib/customer";
 
 type Payload = {
   email: string;
@@ -53,8 +54,11 @@ export async function createCheckoutSession(
 
   const shipping = await quoteShipping(cartLines, shipping_address);
   const currency = (items[0]?.currency || "GBP").toLowerCase();
+  // Link to the signed-in customer if there is one (guest checkout otherwise).
+  const customer = await getCustomer();
   const orderRow = {
     email,
+    customer_id: customer?.id ?? null,
     status: "pending" as const,
     currency: currency.toUpperCase(),
     subtotal,

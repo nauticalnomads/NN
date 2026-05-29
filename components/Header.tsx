@@ -7,6 +7,7 @@ const nav = [
   { href: "/shop", label: "Shop" },
   { href: "/journal", label: "Journal" },
   { href: "/about", label: "About" },
+  { href: "/account", label: "Account" },
 ];
 
 export function Header() {

@@ -532,9 +532,39 @@ on sale → no re-fire; de-dup held.
 
 The §B-13 blog auto-queue (both triggers) is now complete.
 
-### Still open (high-severity)
+### HS-9 — Customer accounts ✅
 
-- Full customer accounts (login + proper per-account order scoping) — architecturally largest.
+Full customer-account system (§B-05 optional accounts, §B-10 refund auth). Customers are
+auth.users WITH a `customers` row — distinct from admins (who have a `public.users` row),
+so customer sign-in never grants admin.
+
+Built:
+
+- **`lib/customer.ts`** — `getCustomer()` (cookie-scoped current customer) and
+  `ensureCustomer()` (get-or-create on first sign-in: links a legacy same-email row,
+  **backfills guest orders** by email so history is complete, sends the welcome email).
+- **`/account/login`** — customer magic-link sign-in (`shouldCreateUser: true`), separate
+  from the admin `/login`. Callback (`/auth/callback`) provisions the customer row when
+  `next` targets `/account`.
+- **`/account`** — editable profile (name) + order history (RLS-scoped).
+- **`/account/orders/[id]`** — customer order detail with tracking + a **secure refund
+  request** (`requestRefundAuthed`): the order is read through the cookie-bound client so
+  RLS only returns it if owned — replacing the UUID-as-bearer guest flow. Blocks duplicate
+  open requests; fires the owner alert + customer email.
+- **Checkout** sets `orders.customer_id` when a customer is signed in.
+- **Middleware** gates `/account/*` (except the login page) and bounces signed-in users off
+  the login page. **Sign-out** now honours `?next=` (customers → "/", admins → "/login").
+- **Header** gains an Account link; welcome email wired (was dormant).
+
+Verified with a live RLS test using **real auth JWTs** (`scripts/account-rls-test.mjs`,
+9/9): provisioning, guest-order backfill, and isolation — customer A sees exactly their own
+orders and cannot read another customer's order or order_items.
+
+Residual (accepted, not a blocker): the **guest** order-confirmation page `/orders/[id]`
+still uses the unguessable order UUID as the bearer for its refund form — standard for
+guest e-commerce status links. Account holders get the hardened RLS-scoped path.
+
+### High-severity: all cleared.
 
 ---
 
@@ -564,4 +594,4 @@ lists. Used in the journal post page.
 - Audit log for kill-switch toggle.
 - Replace `<img>` with `<Image>` in `/admin/social` (the 2 remaining lint warnings).
 - Analytics + uptime monitoring.
-- Full customer accounts (high-severity; architecturally largest).
+- (done — see HS-9 above) Customer accounts.
