@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -18,10 +19,16 @@ export default async function AdminDashboard({
       return 0;
     }
   }
-  const [productCount, orderCount, draftCount] = await Promise.all([
+  const isOps = user.role === "master" || user.role === "regular";
+  const [productCount, orderCount, draftCount, unreadCount] = await Promise.all([
     count(sb.from("products").select("id", { head: true, count: "exact" })),
     count(sb.from("orders").select("id", { head: true, count: "exact" })),
     count(sb.from("products").select("id", { head: true, count: "exact" }).eq("status", "draft")),
+    isOps
+      ? count(
+          sb.from("notifications").select("id", { head: true, count: "exact" }).is("read_at", null),
+        )
+      : Promise.resolve(0),
   ]);
 
   return (
@@ -41,6 +48,15 @@ export default async function AdminDashboard({
         <Stat label="Drafts" value={draftCount} />
         <Stat label="Orders" value={orderCount} />
       </div>
+
+      {isOps && unreadCount > 0 && (
+        <Link
+          href="/admin/notifications"
+          className="mt-6 block rounded-sm border border-accent-sun/40 bg-surface-2 px-4 py-3 font-mono text-caption text-accent-sun no-underline hover:border-accent-sun"
+        >
+          {unreadCount} notification{unreadCount === 1 ? "" : "s"} need your attention →
+        </Link>
+      )}
     </div>
   );
 }

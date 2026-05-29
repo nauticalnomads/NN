@@ -4,6 +4,7 @@ import { getStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/service";
 import { autoFulfilOrder } from "@/lib/fulfilment";
 import { sendOrderConfirmation } from "@/lib/email";
+import { notifyOwner } from "@/lib/notifications";
 
 // Trust the WEBHOOK, not the redirect — Stripe Checkout's success_url can be
 // reached without paying (e.g. browser back). We only flip status to 'paid'
@@ -62,12 +63,16 @@ export async function POST(request: Request) {
         const d = event.data.object as Stripe.Dispute;
         const orderId = (d.metadata as Record<string, string> | null)?.order_id;
         if (orderId) {
+          const detail = `Order ${orderId}: ${d.reason} — ${d.amount / 100} ${d.currency}`;
           await sb.from("notifications").insert({
             type: "dispute_opened",
             title: "Stripe dispute opened",
-            body: `Order ${orderId}: ${d.reason} — ${d.amount / 100} ${d.currency}`,
+            body: detail,
             order_id: orderId,
           } as never);
+          await notifyOwner("dispute_opened", "Stripe dispute opened", detail).catch(
+            () => undefined,
+          );
         }
         break;
       }

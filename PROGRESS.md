@@ -290,9 +290,54 @@ Storefront verified end-to-end against real data:
 
 1. ✅ Migration complete (Step 1)
 2. ~~JetPrint integration~~ (closed by removal)
-3. ⏳ Printify live shipping — NEXT
-4. ⏳ Admin shipping-zone editor
-5. ⏳ Owner-alert wiring + `/admin/notifications` inbox
-6. ⏳ `/admin/orders/[id]` detail + manual-fallback view + retry button
+3. ✅ Printify live shipping
+4. ✅ Admin shipping-zone editor + Make.com webhook field
+5. ✅ Owner-alert wiring + `/admin/notifications` inbox
+6. ⏳ `/admin/orders/[id]` detail + manual-fallback view + retry button — NEXT
 7. ⏳ Retry-with-backoff for transient POD failures
 8. ⏳ Stripe `charge.refunded` / `refund.updated` reconciliation
+
+---
+
+## Step 5 — Owner alerts + `/admin/notifications` inbox ✅
+
+Wired the attention-needed notification path end-to-end (§B-07 §14/15). Previously
+`notifications` rows were inserted but the owner was never emailed and there was no
+in-admin inbox.
+
+### Built
+
+- **`lib/notifications.ts` → `notifyOwner(eventType, subject, body)`** — single funnel
+  all trigger sites call. Reads `store_settings.notification_prefs`; emails the owner
+  via `sendOwnerAlert` only when that event type is enabled (missing key defaults to
+  enabled, matching the seeded all-true default).
+- **Three trigger sites wired** (each right after its existing `notifications.insert`):
+  - `lib/fulfilment.ts` → `fulfilment_failed`
+  - `app/orders/[order]/actions.ts` → `refund_requested`
+  - `app/api/webhooks/stripe/route.ts` (`charge.dispute.created`) → `dispute_opened`
+  - All fire-and-forget (`.catch(() => undefined)`) so a mail failure never breaks the
+    order/fulfilment/refund flow.
+- **`/admin/notifications` inbox** (ops only — master/regular via `requireOps` + RLS
+  `notifications_ops`): unread-first list, per-row "mark read", "mark all read", links to
+  the order. Empty state. `actions.ts` has `markRead` / `markAllRead` (service client,
+  revalidates inbox + dashboard).
+- **Nav + dashboard surfacing**: "Notifications" nav item (ops only) with an unread count
+  badge; dashboard shows an unread-alerts banner linking to the inbox.
+- **Settings**: per-event email toggles (`fulfilment_failed`, `refund_requested`,
+  `dispute_opened`) persisted to `store_settings.notification_prefs`. All events still
+  land in the inbox regardless of these toggles — the toggles only gate the _email_.
+
+### Verified
+
+- `tsc --noEmit` clean.
+- `next lint` clean (only the pre-existing `<img>` warnings in `/admin/social`).
+- `prettier --check .` clean.
+- `next build` succeeds; `/admin/notifications` present in the route manifest (static).
+
+### Not yet tested (needs live env / real events)
+
+- Actual Resend delivery of an owner alert (no `.env.local` / `RESEND_API_KEY` in this
+  fresh sandbox). Logic is exercised by typecheck/build; a real email send is gated on
+  the end-to-end test purchase after Step 8.
+- The inbox "View order →" link points at `/admin/orders/[id]`, which Step 6 builds; it
+  will 404 until then.

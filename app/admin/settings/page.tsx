@@ -15,6 +15,7 @@ export default async function AdminSettings() {
   const s = (store as unknown as Record<string, unknown>) || {};
   const sh = (ship as unknown as Record<string, unknown>) || {};
   const zones: Zone[] = Array.isArray(sh.flat_zones) ? (sh.flat_zones as Zone[]) : [];
+  const prefs = (s.notification_prefs as Record<string, boolean> | null) || {};
 
   return (
     <div className="max-w-2xl">
@@ -62,6 +63,36 @@ export default async function AdminSettings() {
             fail in &quot;live&quot; mode.
           </p>
           <ZoneEditor initial={zones} />
+        </div>
+        <div>
+          <p className="font-mono text-caption tracking-wide text-ink/60 uppercase">
+            Owner email alerts
+          </p>
+          <p className="mt-1 mb-3 font-mono text-caption text-ink/50">
+            Email the owner only on attention-needed events. Routine orders stay in the admin, never
+            the inbox. All events still appear in the Notifications inbox regardless of these
+            toggles.
+          </p>
+          <div className="space-y-4">
+            <Toggle
+              label="Fulfilment failed"
+              name="notify_fulfilment_failed"
+              defaultChecked={prefs.fulfilment_failed !== false}
+              help="A paid order could not be placed with the POD provider."
+            />
+            <Toggle
+              label="Refund requested"
+              name="notify_refund_requested"
+              defaultChecked={prefs.refund_requested !== false}
+              help="A customer requested a refund on their order."
+            />
+            <Toggle
+              label="Dispute opened"
+              name="notify_dispute_opened"
+              defaultChecked={prefs.dispute_opened !== false}
+              help="A Stripe payment dispute / chargeback was opened."
+            />
+          </div>
         </div>
         <TextField
           label="Make.com webhook URL (for social tool publishing)"

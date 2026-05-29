@@ -2,6 +2,7 @@
 
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendRefundUpdate } from "@/lib/email";
+import { notifyOwner } from "@/lib/notifications";
 
 // Customer refund request — service client (no auth required by design for the
 // order-confirmation URL; the order id is a UUID and acts as the bearer).
@@ -34,13 +35,16 @@ export async function requestRefund(payload: {
     status: "requested",
   } as never);
 
+  const detail = `Order ${orderId} — ${amount} ${currency}: ${reason.slice(0, 200)}`;
   await sb.from("notifications").insert({
     type: "refund_requested",
     title: "Refund requested",
-    body: `Order ${orderId} — ${amount} ${currency}: ${reason.slice(0, 200)}`,
+    body: detail,
     order_id: orderId,
   } as never);
 
   sendRefundUpdate(orderId, "requested", amount, currency).catch(() => undefined);
+  // Owner alert (gated by notification_prefs), separate from the customer email.
+  notifyOwner("refund_requested", "Refund requested", detail).catch(() => undefined);
   return { ok: true };
 }

@@ -6,6 +6,7 @@
 //   - permanent failures create a `notifications` row + flip order status
 import { createServiceClient } from "@/lib/supabase/service";
 import { printfulHeaders } from "@/lib/shipping-printful";
+import { notifyOwner } from "@/lib/notifications";
 
 type OrderItem = {
   id: string;
@@ -212,15 +213,19 @@ export async function autoFulfilOrder(orderId: string) {
     .eq("id", orderId);
 
   if (!allOk) {
+    const detail = `Order ${orderId}: ${results
+      .filter((r) => !r.ok)
+      .map((r) => `${r.provider}: ${r.error}`)
+      .join("; ")}`;
     await sb.from("notifications").insert({
       type: "fulfilment_failed",
       title: "Fulfilment failed",
-      body: `Order ${orderId}: ${results
-        .filter((r) => !r.ok)
-        .map((r) => `${r.provider}: ${r.error}`)
-        .join("; ")}`,
+      body: detail,
       order_id: orderId,
     } as never);
+    // Email the owner (gated by notification_prefs). Fire-and-forget so a
+    // mail failure never breaks the fulfilment flow.
+    await notifyOwner("fulfilment_failed", "Fulfilment failed", detail).catch(() => undefined);
   }
 
   return { results, allOk };

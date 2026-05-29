@@ -40,6 +40,11 @@ export async function updateSettings(formData: FormData) {
     vat_rate: Number(formData.get("vat_rate") || 0),
     brand_voice: String(formData.get("brand_voice") || ""),
     make_webhook_url: String(formData.get("make_webhook_url") || "").trim() || null,
+    notification_prefs: {
+      fulfilment_failed: formData.get("notify_fulfilment_failed") === "on",
+      refund_requested: formData.get("notify_refund_requested") === "on",
+      dispute_opened: formData.get("notify_dispute_opened") === "on",
+    },
   };
   await sb.from("store_settings").upsert(store as never);
 
