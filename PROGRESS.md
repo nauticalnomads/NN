@@ -482,8 +482,17 @@ Added `triggers.crons: ["0 * * * *"]` + a custom `worker.js` entry that wraps Op
 `wrangler deploy --dry-run` bundles the worker with the `scheduled` handler present.
 **⚠️ Owner must set `CRON_SECRET` as a Cloudflare secret.**
 
+### HS-5 — Blog auto-queue trigger wired ✅
+
+`autoQueueForProduct` was dead code. Added `app/admin/products/actions.ts`
+`setProductStatus` + Publish/Unpublish buttons on the products list. A real
+draft → published transition fires `autoQueueForProduct(id, "auto_new_product")`
+(de-dup + graceful AI fallback already in `lib/blog.ts`). Verified the `blog_posts`
+insert path against the live DB (correct columns). **On-sale trigger still pending** —
+needs a product price-edit UI, which doesn't exist yet.
+
 ### Still open (high-severity)
 
-- Blog auto-queue triggers (`autoQueueForProduct` is never called).
+- On-sale blog trigger (needs product price-edit UI).
 - PDF export of financial report.
 - Customer accounts / refund auth (UUID-as-bearer is unsafe) — architecturally largest.
