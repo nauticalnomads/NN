@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { formatPrice } from "@/lib/format";
 import { ClearCart } from "./ClearCart";
 import { RequestRefund } from "./RequestRefund";
+import { StatusPoll } from "./StatusPoll";
 
 export const metadata: Metadata = {
   title: "Order confirmation",
@@ -42,6 +43,7 @@ export default async function OrderPage({ params }: { params: Promise<{ order: s
   return (
     <Container className="py-16">
       {paid && <ClearCart />}
+      {!paid && <StatusPoll paid={paid} />}
       <p className="font-mono text-xs tracking-[0.3em] text-accent-sea uppercase">Order received</p>
       <h1 className="mt-4 font-display text-display-2 tracking-tight text-ink">
         {paid ? "Thanks — that's in." : "We're confirming your payment…"}
@@ -65,7 +67,7 @@ export default async function OrderPage({ params }: { params: Promise<{ order: s
           Status: <span className="text-ink uppercase">{r.status}</span>
         </p>
       </div>
-      {paid && <RequestRefund orderId={r.id} total={r.grand_total} currency={r.currency} />}
+      {paid && <RequestRefund orderId={r.id} />}
     </Container>
   );
 }

@@ -2,29 +2,55 @@
 
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendRefundUpdate } from "@/lib/email";
+import { notifyOwner } from "@/lib/notifications";
 
-// Customer refund request — service client (no auth required by design for the
-// order-confirmation URL; the order id is a UUID and acts as the bearer).
-// Inserts a `refunds` row in `requested` state. Admins action via /admin/orders.
-export async function requestRefund(payload: {
-  orderId: string;
-  reason: string;
-  amount: number;
-  currency: string;
-}) {
+// Customer refund request from the order-confirmation URL. Guest checkout has
+// no account, so access is via the order id (a v4 UUID). Hardening here:
+//   - amount + currency are derived SERVER-SIDE from the order, never trusted
+//     from the client (a client-supplied amount feeds the Stripe refund admins
+//     later action — it must not be attacker-controllable).
+//   - the requester must confirm the order email; it's verified against the row
+//     (defence-in-depth + prevents accidental/automated requests).
+//   - duplicate guard: one open/done refund per order.
+// Full account-based scoping remains a larger separate effort.
+export async function requestRefund(payload: { orderId: string; reason: string; email: string }) {
   const sb = createServiceClient();
-  const { orderId, reason, amount, currency } = payload;
+  const { orderId, reason, email } = payload;
 
-  // Verify the order exists and is paid (avoids spurious requests).
   const { data: orderData } = await sb
     .from("orders")
-    .select("id, status")
+    .select("id, email, status, grand_total, currency")
     .eq("id", orderId)
     .maybeSingle();
-  const order = orderData as unknown as { status: string } | null;
+  const order = orderData as unknown as {
+    id: string;
+    email: string;
+    status: string;
+    grand_total: number;
+    currency: string;
+  } | null;
   if (!order || !["paid", "fulfilling", "shipped", "delivered"].includes(order.status)) {
     return { error: "Order not eligible for refund." };
   }
+
+  // Verify the supplied email matches the order (case-insensitive).
+  if ((email || "").trim().toLowerCase() !== order.email.toLowerCase()) {
+    return { error: "That email doesn't match this order." };
+  }
+
+  // Duplicate guard — don't queue a second request if one is already in flight
+  // or done.
+  const { data: existing } = await sb
+    .from("refunds")
+    .select("id")
+    .eq("order_id", orderId)
+    .in("status", ["requested", "processing", "completed"])
+    .maybeSingle();
+  if (existing) return { error: "A refund is already in progress for this order." };
+
+  // Amount + currency come from the order, NOT the client.
+  const amount = order.grand_total;
+  const currency = order.currency;
 
   await sb.from("refunds").insert({
     order_id: orderId,
@@ -34,13 +60,16 @@ export async function requestRefund(payload: {
     status: "requested",
   } as never);
 
+  const detail = `Order ${orderId} — ${amount} ${currency}: ${reason.slice(0, 200)}`;
   await sb.from("notifications").insert({
     type: "refund_requested",
     title: "Refund requested",
-    body: `Order ${orderId} — ${amount} ${currency}: ${reason.slice(0, 200)}`,
+    body: detail,
     order_id: orderId,
   } as never);
 
   sendRefundUpdate(orderId, "requested", amount, currency).catch(() => undefined);
+  // Owner alert (gated by notification_prefs), separate from the customer email.
+  notifyOwner("refund_requested", "Refund requested", detail).catch(() => undefined);
   return { ok: true };
 }

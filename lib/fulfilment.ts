@@ -3,9 +3,35 @@
 // `fulfilment_attempts` with an idempotency key. Safety rails:
 //   - `store_settings.auto_fulfilment_enabled` is the kill-switch
 //   - `store_settings.fulfilment_dry_run` blocks real POD calls (default ON)
-//   - permanent failures create a `notifications` row + flip order status
+//   - transient failures (5xx/timeout) retry up to MAX_RETRIES with backoff
+//   - permanent failures (4xx) create a `notifications` row + flip order status
 import { createServiceClient } from "@/lib/supabase/service";
 import { printfulHeaders } from "@/lib/shipping-printful";
+import { notifyOwner } from "@/lib/notifications";
+
+const MAX_RETRIES = 3; // 1 initial + 2 retries; backoff: 1s, 2s, 4s
+const RETRY_BASE_MS = 1000;
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// 4xx from a POD provider = permanent (bad address, variant not found, etc.).
+// 5xx / network errors = transient — worth retrying.
+function isTransient(err: unknown): boolean {
+  if (err instanceof Error) {
+    const m = err.message;
+    // Our throw format: "Printful 429: ..." / "Printify 503: ..."
+    const match = m.match(/(?:Printful|Printify) (\d{3}):/);
+    if (match) {
+      const code = Number(match[1]);
+      return code >= 500 || code === 429;
+    }
+    // Network/timeout errors (fetch rejects with TypeError or AbortError)
+    return true;
+  }
+  return false;
+}
 
 type OrderItem = {
   id: string;
@@ -171,16 +197,26 @@ export async function autoFulfilOrder(orderId: string) {
       // the dry-run pathway in the audit log.
       providerOrderId = `DRYRUN-${provider}-${orderId.slice(0, 8)}`;
     } else {
-      try {
-        const placed =
-          provider === "printful"
-            ? await placePrintful(order, group)
-            : provider === "printify"
-              ? await placePrintify(order, group)
-              : { providerOrderId: `UNMAPPED-${orderId.slice(0, 8)}` };
-        providerOrderId = placed.providerOrderId;
-      } catch (err) {
-        errMsg = err instanceof Error ? err.message : String(err);
+      // Retry loop — transient errors (5xx/429/network) get up to MAX_RETRIES
+      // attempts with exponential backoff. Permanent 4xx errors fail immediately.
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        if (attempt > 0) {
+          await sleep(RETRY_BASE_MS * Math.pow(2, attempt - 1));
+        }
+        try {
+          const placed =
+            provider === "printful"
+              ? await placePrintful(order, group)
+              : provider === "printify"
+                ? await placePrintify(order, group)
+                : { providerOrderId: `UNMAPPED-${orderId.slice(0, 8)}` };
+          providerOrderId = placed.providerOrderId;
+          errMsg = undefined; // success — clear any previous transient error
+          break;
+        } catch (err) {
+          errMsg = err instanceof Error ? err.message : String(err);
+          if (!isTransient(err) || attempt === MAX_RETRIES) break; // permanent or exhausted
+        }
       }
     }
 
@@ -212,15 +248,19 @@ export async function autoFulfilOrder(orderId: string) {
     .eq("id", orderId);
 
   if (!allOk) {
+    const detail = `Order ${orderId}: ${results
+      .filter((r) => !r.ok)
+      .map((r) => `${r.provider}: ${r.error}`)
+      .join("; ")}`;
     await sb.from("notifications").insert({
       type: "fulfilment_failed",
       title: "Fulfilment failed",
-      body: `Order ${orderId}: ${results
-        .filter((r) => !r.ok)
-        .map((r) => `${r.provider}: ${r.error}`)
-        .join("; ")}`,
+      body: detail,
       order_id: orderId,
     } as never);
+    // Email the owner (gated by notification_prefs). Fire-and-forget so a
+    // mail failure never breaks the fulfilment flow.
+    await notifyOwner("fulfilment_failed", "Fulfilment failed", detail).catch(() => undefined);
   }
 
   return { results, allOk };

@@ -237,6 +237,21 @@ export interface NotificationRow {
   created_at: string;
 }
 
+export interface EmailSuppressionRow {
+  email: string;
+  reason: string | null;
+  created_at: string;
+}
+
+export interface AuditLogRow {
+  id: string;
+  actor_id: string | null;
+  actor_email: string | null;
+  action: string;
+  detail: Json;
+  created_at: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -256,6 +271,8 @@ export interface Database {
       blog_posts: Table<BlogPostRow, "title" | "slug">;
       fulfilment_attempts: Table<FulfilmentAttemptRow, "order_id">;
       notifications: Table<NotificationRow, "type" | "title">;
+      email_suppressions: Table<EmailSuppressionRow, "email">;
+      audit_log: Table<AuditLogRow, "action">;
     };
     Views: Record<never, never>;
     Functions: {

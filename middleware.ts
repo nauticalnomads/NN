@@ -31,16 +31,34 @@ export async function middleware(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (request.nextUrl.pathname.startsWith("/admin") && !user) {
+    const path = request.nextUrl.pathname;
+
+    if (path.startsWith("/admin") && !user) {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/login";
-      redirectUrl.searchParams.set("next", request.nextUrl.pathname);
+      redirectUrl.searchParams.set("next", path);
       return NextResponse.redirect(redirectUrl);
     }
 
-    if (request.nextUrl.pathname === "/login" && user) {
+    if (path === "/login" && user) {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/admin";
+      redirectUrl.searchParams.delete("next");
+      return NextResponse.redirect(redirectUrl);
+    }
+
+    // Customer area: gate everything under /account except the login page.
+    if (path.startsWith("/account") && path !== "/account/login" && !user) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/account/login";
+      redirectUrl.searchParams.set("next", path);
+      return NextResponse.redirect(redirectUrl);
+    }
+
+    // Already signed in → skip the customer login page.
+    if (path === "/account/login" && user) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/account";
       redirectUrl.searchParams.delete("next");
       return NextResponse.redirect(redirectUrl);
     }
@@ -52,5 +70,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/login", "/auth/:path*"],
+  matcher: ["/admin/:path*", "/login", "/account/:path*", "/auth/:path*"],
 };

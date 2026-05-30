@@ -290,9 +290,352 @@ Storefront verified end-to-end against real data:
 
 1. ✅ Migration complete (Step 1)
 2. ~~JetPrint integration~~ (closed by removal)
-3. ⏳ Printify live shipping — NEXT
-4. ⏳ Admin shipping-zone editor
-5. ⏳ Owner-alert wiring + `/admin/notifications` inbox
-6. ⏳ `/admin/orders/[id]` detail + manual-fallback view + retry button
-7. ⏳ Retry-with-backoff for transient POD failures
-8. ⏳ Stripe `charge.refunded` / `refund.updated` reconciliation
+3. ✅ Printify live shipping
+4. ✅ Admin shipping-zone editor + Make.com webhook field
+5. ✅ Owner-alert wiring + `/admin/notifications` inbox
+6. ✅ `/admin/orders/[id]` detail + manual-fallback view + retry button
+7. ✅ Retry-with-backoff for transient POD failures
+8. ✅ Stripe `charge.refunded` / `refund.updated` reconciliation
+
+---
+
+## Step 8 — Stripe refund webhook reconciliation ✅
+
+Replaced the two no-op cases in `app/api/webhooks/stripe/route.ts`.
+
+### `charge.refunded`
+
+Triggered when any refund succeeds on a charge. Logic:
+
+1. Find our order by `stripe_payment_intent_id`.
+2. For each `succeeded` Stripe refund on the charge, look for an open (not
+   `completed`/`rejected`) local `refunds` row for that order.
+3. **If found:** mark it `completed`, record `stripe_refund_id`, flip order to `refunded`,
+   send customer refund email (fire-and-forget).
+4. **If not found** (refund was issued directly in the Stripe dashboard): insert a new
+   reconciliation `refunds` row (`status=completed`) so it's visible in the admin.
+   Flip order to `refunded`.
+
+- Idempotent: already-completed rows are never touched (`.not("status", "in", …)`).
+
+### `refund.updated`
+
+Triggered on Stripe refund status changes (pending → succeeded, failed, canceled).
+Logic:
+
+1. Look up local `refunds` row by `stripe_refund_id`.
+2. Map Stripe status → our enum (`succeeded→completed`, `failed→failed`, `canceled→rejected`,
+   `pending/requires_action→processing`).
+3. Don't downgrade an already-`completed` or `rejected` row (idempotent).
+4. On `completed`: flip order to `refunded` + send customer email.
+
+### Verified
+
+- `tsc --noEmit` clean.
+- `prettier --check .` clean.
+- No live Stripe test yet — gated on the end-to-end test purchase (all 8 steps now done).
+
+## Step 7 — Retry-with-backoff for transient POD failures ✅
+
+### Built
+
+Added to `lib/fulfilment.ts`:
+
+- **`MAX_RETRIES = 3`** (1 initial attempt + up to 2 retries; total max 4 POD calls per
+  provider per order). **Backoff: 1s → 2s → 4s.** Max possible sleep is 7s — well inside the
+  Cloudflare Workers ~30s limit.
+- **`isTransient(err)`** — classifies errors: 5xx + 429 HTTP status codes are transient
+  (retry); 4xx (bad address, variant not found, validation) are permanent (fail immediately,
+  no point retrying). Network/fetch errors (TypeError, AbortError) are treated as transient.
+  Detection is based on the throw format already used by `placePrintful` / `placePrintify`
+  (`"Printful 5xx: …"` / `"Printify 5xx: …"`).
+- Retry loop wraps the provider call; on transient error at attempt < MAX_RETRIES → sleeps
+  and retries. On permanent error or after exhausting retries → breaks and records the failure.
+- A `fulfilment_attempts` row is still recorded once per provider (after the loop), not per
+  retry attempt — the log stays clean. The error detail on a retried-then-failed row includes
+  the final error message.
+- `dry_run` mode bypasses the loop entirely (synthetic result as before).
+
+### Verified
+
+- `tsc --noEmit` clean.
+- `prettier --check .` clean.
+
+## Step 6 — `/admin/orders/[id]` detail page ✅
+
+### Built
+
+- **`app/admin/orders/[id]/page.tsx`** — full order detail: customer + shipping address, line
+  items table (title/variant/SKU/provider IDs/qty/price), order totals, tracking entries,
+  provider orders summary, full `fulfilment_attempts` history with timestamps/status/errors.
+  - Attention banner (amber) when `fulfilment_failed` or `awaiting_fulfilment`.
+  - Status badge with colour coding.
+  - Uses `createServiceClient` (ops only, `requireOps`).
+- **Manual-fallback section** (shown only when attention needed): per-provider collapsible form
+  to paste a provider order reference + optional tracking number. Saves a `fulfilment_attempts`
+  row (status=success, `::manual` idempotency key suffix) and updates order status to
+  `fulfilling`. Appends tracking to `orders.tracking` array if provided.
+- **"Retry auto-fulfilment" button** — calls `autoFulfilOrder(orderId)` server-side (idempotent
+  on `order_id::provider`). Guard: only for retryable statuses.
+- **`app/admin/orders/page.tsx`** — order number is now a `<Link>` to the detail page; rows
+  highlight on hover.
+
+### Verified
+
+- `tsc --noEmit` clean.
+- `next build` succeeds; `/admin/orders/[id]` present as dynamic route (`ƒ`).
+
+## Step 5 — Owner alerts + `/admin/notifications` inbox ✅
+
+Wired the attention-needed notification path end-to-end (§B-07 §14/15). Previously
+`notifications` rows were inserted but the owner was never emailed and there was no
+in-admin inbox.
+
+### Built
+
+- **`lib/notifications.ts` → `notifyOwner(eventType, subject, body)`** — single funnel
+  all trigger sites call. Reads `store_settings.notification_prefs`; emails the owner
+  via `sendOwnerAlert` only when that event type is enabled (missing key defaults to
+  enabled, matching the seeded all-true default).
+- **Three trigger sites wired** (each right after its existing `notifications.insert`):
+  - `lib/fulfilment.ts` → `fulfilment_failed`
+  - `app/orders/[order]/actions.ts` → `refund_requested`
+  - `app/api/webhooks/stripe/route.ts` (`charge.dispute.created`) → `dispute_opened`
+  - All fire-and-forget (`.catch(() => undefined)`) so a mail failure never breaks the
+    order/fulfilment/refund flow.
+- **`/admin/notifications` inbox** (ops only — master/regular via `requireOps` + RLS
+  `notifications_ops`): unread-first list, per-row "mark read", "mark all read", links to
+  the order. Empty state. `actions.ts` has `markRead` / `markAllRead` (service client,
+  revalidates inbox + dashboard).
+- **Nav + dashboard surfacing**: "Notifications" nav item (ops only) with an unread count
+  badge; dashboard shows an unread-alerts banner linking to the inbox.
+- **Settings**: per-event email toggles (`fulfilment_failed`, `refund_requested`,
+  `dispute_opened`) persisted to `store_settings.notification_prefs`. All events still
+  land in the inbox regardless of these toggles — the toggles only gate the _email_.
+
+### Verified
+
+- `tsc --noEmit` clean.
+- `next lint` clean (only the pre-existing `<img>` warnings in `/admin/social`).
+- `prettier --check .` clean.
+- `next build` succeeds; `/admin/notifications` present in the route manifest (static).
+
+### Not yet tested (needs live env / real events)
+
+- Actual Resend delivery of an owner alert (no `.env.local` / `RESEND_API_KEY` in this
+  fresh sandbox). Logic is exercised by typecheck/build; a real email send is gated on
+  the end-to-end test purchase after Step 8.
+- The inbox "View order →" link points at `/admin/orders/[id]`, which Step 6 builds; it
+  will 404 until then.
+
+---
+
+## End-to-end test purchase ✅ (Stripe test mode, dry-run fulfilment)
+
+`scripts/e2e-test.mjs` — **23/23 checks pass** against real Supabase + Stripe test mode,
+`fulfilment_dry_run` ON (no real POD orders placed). Covers:
+
+- Supabase connectivity (268 products), sample product+variant with provider IDs.
+- Stripe test-mode Checkout Session creation (real, customer-clickable URL).
+- `checkout.session.completed` webhook → order `pending`→`fulfilling`,
+  `stripe_payment_intent_id` + `placed_at` recorded, dry-run `fulfilment_attempts`
+  row written, `order_items` snapshot carries provider/product/variant IDs.
+- `refund.updated` webhook → local `refunds` row `requested`→`completed`, **idempotent**
+  (duplicate event ignored).
+- Test data cleaned up afterwards.
+
+Run: `node --env-file=.env.local scripts/e2e-test.mjs` (needs `next start` on :3000).
+
+**Not covered** (needs a browser / live exposure): card entry on Stripe's hosted page;
+inbound Printful/Printify tracking webhooks; real Resend delivery.
+
+---
+
+## High-severity audit items (post-launch-blockers)
+
+### HS-1 — Home page metadata + JSON-LD ✅
+
+`app/page.tsx` now exports explicit `metadata` (title/description/canonical/OG) instead of
+relying on the layout default, and renders `WebSite` JSON-LD (`websiteLd()` added to
+`lib/structured-data.ts`). Organization JSON-LD already in root layout.
+
+### HS-2 — Sitemap includes /journal/\* ✅
+
+`getPublishedPostSlugs()` added to `lib/queries.ts`; `app/sitemap.ts` now lists `/journal`
+
+- every published post. (Still gated by `allowIndexing` — empty until cutover.)
+
+### HS-3 — /cart/unsubscribe route ✅
+
+Was referenced in the abandoned-cart email but didn't exist (404). Built
+`app/cart/unsubscribe/page.tsx` + action that records the suppression. Email link now
+carries `?email=`. New `email_suppressions` table (migration
+`20260529120000_email_suppressions.sql`) — the abandoned-cart cron skips suppressed
+addresses. Code is **defensive**: if the table isn't migrated yet, the page still confirms
+and the cron treats everyone as subscribed. **⚠️ Owner must run the new migration SQL.**
+
+### HS-4 — Abandoned-cart cron wired in wrangler.jsonc ✅
+
+Added `triggers.crons: ["0 * * * *"]` + a custom `worker.js` entry that wraps OpenNext's
+`fetch` and adds a `scheduled` handler which replays an authenticated internal POST to
+`/api/cron/abandoned-cart`. Verified: `opennextjs-cloudflare build` succeeds and
+`wrangler deploy --dry-run` bundles the worker with the `scheduled` handler present.
+**⚠️ Owner must set `CRON_SECRET` as a Cloudflare secret.**
+
+### HS-5 — Blog auto-queue trigger wired ✅
+
+`autoQueueForProduct` was dead code. Added `app/admin/products/actions.ts`
+`setProductStatus` + Publish/Unpublish buttons on the products list. A real
+draft → published transition fires `autoQueueForProduct(id, "auto_new_product")`
+(de-dup + graceful AI fallback already in `lib/blog.ts`). Verified the `blog_posts`
+insert path against the live DB (correct columns). **On-sale trigger still pending** —
+needs a product price-edit UI, which doesn't exist yet.
+
+### HS-6 — PDF export of financial report ✅
+
+Extracted the dashboard's Stripe+COGS calc into `lib/financial.ts`
+`getFinancialSummary(from, to)` (single source of truth — page + exports share it).
+Added `lib/pdf.ts` — a dependency-free single-page PDF builder (byte-accurate xref,
+Helvetica text) that works on Cloudflare Workers where puppeteer/heavy libs can't.
+New route `app/api/admin/financial.pdf` (ops only) + "Export PDF" link on the page.
+Output validated: `file(1)` reports "PDF document, version 1.4, 1 page(s)", xref offsets
+byte-accurate. Carries the estimate disclaimer.
+
+### HS-7 — Refund request hardening ✅
+
+Fixed a real money bug + added defence-in-depth to the guest refund flow
+(`app/orders/[order]/actions.ts`), without committing to a full accounts system:
+
+- **Amount + currency are now derived server-side from the order** — previously the
+  client supplied them, and that value feeds the Stripe refund admins later action.
+  A malicious caller could have requested an arbitrary refund amount. Now ignored.
+- **Email confirmation**: requester must type the order email; verified case-insensitively
+  against the row. Protects direct API calls and prevents accidental/automated requests.
+- **Duplicate guard**: one open/completed refund per order (no spam / duplicate owner alerts).
+- Client (`RequestRefund.tsx`) collects the email and surfaces the server error.
+- Verified all three guards against the live DB (wrong email rejected, amount derived,
+  duplicate rejected).
+
+**Still open:** full customer accounts (login + order-history scoping + welcome email) remains
+the larger separate effort; this hardening covers the immediate money-touching risk.
+
+### HS-8 — Product edit page + on-sale blog trigger ✅
+
+Built `/admin/products/[id]` — edit price, compare-at/was price, status, featured, SEO.
+New `updateProduct` action fires the blog auto-queue on **two** transitions now:
+draft→published (`auto_new_product`) and newly-on-sale, i.e. price drops below
+compare_at_price (`auto_on_sale`). De-dup is a backstop. "Edit" link added to the
+products list. This also gives the admin its first real product-edit capability
+(previously read-only + publish toggle). Verified the full on-sale chain against a
+throwaway product on the live DB: drop below compare-at → 1 draft queued; re-save while
+on sale → no re-fire; de-dup held.
+
+The §B-13 blog auto-queue (both triggers) is now complete.
+
+### HS-9 — Customer accounts ✅
+
+Full customer-account system (§B-05 optional accounts, §B-10 refund auth). Customers are
+auth.users WITH a `customers` row — distinct from admins (who have a `public.users` row),
+so customer sign-in never grants admin.
+
+Built:
+
+- **`lib/customer.ts`** — `getCustomer()` (cookie-scoped current customer) and
+  `ensureCustomer()` (get-or-create on first sign-in: links a legacy same-email row,
+  **backfills guest orders** by email so history is complete, sends the welcome email).
+- **`/account/login`** — customer magic-link sign-in (`shouldCreateUser: true`), separate
+  from the admin `/login`. Callback (`/auth/callback`) provisions the customer row when
+  `next` targets `/account`.
+- **`/account`** — editable profile (name) + order history (RLS-scoped).
+- **`/account/orders/[id]`** — customer order detail with tracking + a **secure refund
+  request** (`requestRefundAuthed`): the order is read through the cookie-bound client so
+  RLS only returns it if owned — replacing the UUID-as-bearer guest flow. Blocks duplicate
+  open requests; fires the owner alert + customer email.
+- **Checkout** sets `orders.customer_id` when a customer is signed in.
+- **Middleware** gates `/account/*` (except the login page) and bounces signed-in users off
+  the login page. **Sign-out** now honours `?next=` (customers → "/", admins → "/login").
+- **Header** gains an Account link; welcome email wired (was dormant).
+
+Verified with a live RLS test using **real auth JWTs** (`scripts/account-rls-test.mjs`,
+9/9): provisioning, guest-order backfill, and isolation — customer A sees exactly their own
+orders and cannot read another customer's order or order_items.
+
+Residual (accepted, not a blocker): the **guest** order-confirmation page `/orders/[id]`
+still uses the unguessable order UUID as the bearer for its refund form — standard for
+guest e-commerce status links. Account holders get the hardened RLS-scoped path.
+
+### High-severity: all cleared.
+
+---
+
+## Medium / polish items
+
+### MED-1 — Financial report: Stripe pagination ✅
+
+`lib/financial.ts` was capped at `limit: 100` balance transactions — date ranges with
+more were silently undercounting revenue/fees/refunds. Now uses
+`.autoPagingToArray({ limit: 5000 })` (bounded for the Workers time limit). Verified the
+API call + pagination works against the live test account.
+
+### MED-2 — Journal markdown rendering ✅
+
+`/journal/[slug]` rendered the body as `whitespace-pre-line`, so readers saw raw
+`**markdown**`. Added `lib/markdown.tsx` — a dependency-free, XSS-safe markdown→React
+renderer (renders to elements, never `dangerouslySetInnerHTML`; links restricted to
+http/mailto). Covers headings, paragraphs, bold/italic/code, links, ordered/unordered
+lists. Used in the journal post page.
+
+### Still open (medium / polish)
+
+- Variant-specific image on Stripe line items.
+- Social scheduling.
+- Order page client-poll for status flip.
+- 301 redirect map from Shopify URLs (needs the old URL list).
+- Audit log for kill-switch toggle.
+- Replace `<img>` with `<Image>` in `/admin/social` (the 2 remaining lint warnings).
+- Analytics + uptime monitoring.
+- (done — see HS-9 above) Customer accounts.
+
+### MED-3 — 301/308 redirect map from old Shopify URLs ✅
+
+`scripts/generate-redirects.mjs` (read-only, re-runnable) pulls every Shopify product +
+collection handle via the Admin API (client-credentials auth), matches products to our new
+slug by `source_id` (the full Shopify gid), and writes `lib/redirects.json`, wired into
+`next.config.mjs` `redirects()`.
+
+Result: 62 redirects. All 268 migrated products kept their Shopify handle as their slug, so
+they need NO redirect (handles preserved). The map covers: the 9 dropped JetPrint watches →
+`/shop`, 44 old collection URLs → `/shop` (no per-collection equivalents migrated), and 9
+static page paths (about/contact/shipping/size-guide) → their new pages. Verified live:
+`/collections/accessories`, `/products/rose-metal-watch`, `/pages/about` all 308-redirect to
+the right targets; a live product (`/products/mens-nomad-tee-green`) serves 200 unaffected.
+
+Note: Next's `permanent: true` emits **308** (Permanent Redirect), which Google treats
+identically to 301 for SEO/link-equity. True 301 status would require middleware on the
+storefront hot path (perf cost); 308 is the idiomatic, zero-overhead choice. Re-run the
+script before cutover to pick up any catalogue changes.
+
+### MED-4 — Kill-switch / settings audit log ✅ (code; needs the audit_log migration run)
+
+See migration `20260529130000_audit_log.sql`. `updateSettings` records actor + from→to for
+auto_fulfilment_enabled, fulfilment_dry_run, vat_enabled, shipping_mode; settings page shows
+the trail. Degrades gracefully until the table is created.
+
+### MED-5 — admin/social `<img>` → `next/image` ✅
+
+Replaced the two `<img>` tags in `/admin/social` with `next/image` (`unoptimized`, since the
+Drive thumbnail/redirect URLs aren't optimizer-friendly). Lint is now fully clean — **0
+warnings, 0 errors**.
+
+### MED-6 — Order confirmation live status poll ✅
+
+`/orders/[order]` is reached via the Stripe success redirect, but status flips to `paid` only
+when the webhook lands (we trust the webhook, not the redirect). Added `StatusPoll` client
+component: while not yet paid, it `router.refresh()`es every 3s (bounded to ~1 min) so the
+page updates from "confirming your payment…" to "thanks — that's in." with no manual reload.
+Stops once paid; bounded so a genuinely failed payment doesn't poll forever.
+
+### Audit log — verified live
+
+`audit_log` migration applied; verified table + insert path + ops-only RLS (anon blocked).
+Settings changes now record actor + from→to and surface in the settings trail.

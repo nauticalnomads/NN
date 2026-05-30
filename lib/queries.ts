@@ -92,6 +92,21 @@ export async function getProductSlugs(): Promise<string[]> {
   }
 }
 
+export async function getPublishedPostSlugs(): Promise<string[]> {
+  if (!configured()) return [];
+  try {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("blog_posts")
+      .select("slug")
+      .eq("status", "published");
+    if (error) throw error;
+    return ((data ?? []) as unknown as { slug: string }[]).map((p) => p.slug);
+  } catch {
+    return [];
+  }
+}
+
 export async function getCollections(): Promise<CollectionRow[]> {
   if (!configured()) return [];
   try {

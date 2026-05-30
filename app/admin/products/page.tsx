@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { formatPrice } from "@/lib/format";
+import { setProductStatus } from "./actions";
 
 export default async function AdminProducts() {
   await requireStaff();
@@ -27,7 +28,7 @@ export default async function AdminProducts() {
     <div>
       <h1 className="font-display text-display-2 tracking-tight text-ink">Products</h1>
       <p className="mt-3 font-body text-body text-ink/60">
-        {rows.length} most recent (live edit UI in a follow-up).
+        {rows.length} most recent. Publishing a draft auto-queues a blog draft.
       </p>
       <div className="mt-8 overflow-hidden rounded-sm border border-ink/10">
         <table className="w-full text-left">
@@ -38,6 +39,7 @@ export default async function AdminProducts() {
               <th className="px-4 py-3">Provider</th>
               <th className="px-4 py-3 text-right">Price</th>
               <th className="px-4 py-3 text-right">Cost</th>
+              <th className="px-4 py-3 text-right">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -56,11 +58,32 @@ export default async function AdminProducts() {
                 <td className="px-4 py-3 text-right font-mono text-ink/60">
                   {p.base_cost != null ? formatPrice(p.base_cost, p.currency) : "—"}
                 </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex items-center justify-end gap-3">
+                    <Link
+                      href={`/admin/products/${p.id}`}
+                      className="font-mono text-xs tracking-widest text-ink/70 uppercase no-underline hover:text-accent-sun"
+                    >
+                      Edit
+                    </Link>
+                    <form action={setProductStatus}>
+                      <input type="hidden" name="product_id" value={p.id} />
+                      <input
+                        type="hidden"
+                        name="status"
+                        value={p.status === "published" ? "draft" : "published"}
+                      />
+                      <button className="rounded-sm border border-ink/20 px-3 py-1 font-mono text-xs tracking-widest text-ink/70 uppercase hover:border-accent-sun hover:text-accent-sun">
+                        {p.status === "published" ? "Unpublish" : "Publish"}
+                      </button>
+                    </form>
+                  </div>
+                </td>
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center font-body text-ink/50">
+                <td colSpan={6} className="px-4 py-8 text-center font-body text-ink/50">
                   Catalogue empty — run the migration.
                 </td>
               </tr>
