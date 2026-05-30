@@ -20,7 +20,7 @@ const nextConfig = {
       process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ??
       "pk_test_51Tbpa8J9KizllqPH12T4T1FYkGLXgV2Prx0vYWU3fBns7H5iJHQcUxhlCQ06GQ1jMl3qZxH1cG36upmVJcI4IfD100o5hzuE4X",
     NEXT_PUBLIC_SITE_URL:
-      process.env.NEXT_PUBLIC_SITE_URL ?? "https://nn.lucky-grass-1c61.workers.dev",
+      process.env.NEXT_PUBLIC_SITE_URL ?? "https://nautical-nomads.com",
     NEXT_PUBLIC_ALLOW_INDEXING: process.env.NEXT_PUBLIC_ALLOW_INDEXING ?? "false",
   },
   async redirects() {
