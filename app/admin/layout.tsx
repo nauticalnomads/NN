@@ -12,6 +12,11 @@ export const metadata: Metadata = {
 
 const NAV: { href: string; label: string; allowed: UserRole[] }[] = [
   { href: "/admin", label: "Dashboard", allowed: ["master", "regular", "content"] },
+  {
+    href: "/admin/content",
+    label: "Homepage & Content",
+    allowed: ["master", "regular", "content"],
+  },
   { href: "/admin/products", label: "Products", allowed: ["master", "regular", "content"] },
   { href: "/admin/collections", label: "Collections", allowed: ["master", "regular", "content"] },
   { href: "/admin/orders", label: "Orders", allowed: ["master", "regular"] },
