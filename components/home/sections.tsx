@@ -126,7 +126,7 @@ export function CampaignTitle({
   ctaUrl?: string;
 }) {
   return (
-    <section className="bg-hull-white px-6 py-18 text-center">
+    <section className="bg-hull-white px-6 py-20 text-center">
       <h2 className="font-display text-[clamp(2.75rem,5vw,4rem)] font-semibold text-deep-ink">
         {heading || "Live by the Tide"}
       </h2>
