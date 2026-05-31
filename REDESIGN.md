@@ -17,7 +17,7 @@ Defaults agreed for missing data:
 ## Phases (§10 order)
 
 1. ✅ Design tokens — fonts (Barlow Condensed/Barlow/Inter) + Horizon colour aliases.
-2. ⬜ Header — utility bar + main header + mobile drawer.
+2. 🟡 Header — utility bar + 3-zone main header + sticky + mobile drawer DONE; desktop mega panel in Phase 3.
 3. ⬜ Mega menu — desktop hover + mobile accordion.
 4. ⬜ Footer — newsletter band + tag row + main footer + bottom bar.
 5. ⬜ Homepage sections — hero collage → carousel → 3-col banner → title block → photo strip → trends tiles.
