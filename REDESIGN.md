@@ -24,7 +24,7 @@ Schema reconciliations (existing repo vs v2 SQL):
 1. 🟡 Foundation — fonts ✅, colour tokens ✅; DB migrations ⬜ (SQL handed to owner).
 2. 🟡 Header & nav — gender bar ✅, main header ✅, desktop mega menu ✅, mobile drawer ✅.
 3. ✅ Footer — newsletter band (Resend wired) + scrolling tag row (CMS) + 3 columns + bottom bar.
-4. ⬜ Homepage — hero collage, carousel, banner, title block, photo strip, tiles.
+4. ✅ Homepage — hero collage + featured carousel + 3-col banner + campaign title + photo strip + New Arrivals tiles (all CMS-driven, Driftwood placeholders).
 5. ⬜ Admin CMS — "Homepage & Content" + "Collections" (incl. bulk product tagger).
 6. ⬜ PLP & product card — collection template, sub-nav, filters, quick-add hover.
 7. ⬜ Wishlist — endpoints + header/card/page, guest localStorage + merge on sign-in.
