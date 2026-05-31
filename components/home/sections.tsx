@@ -42,7 +42,7 @@ export function HeroCollage({ data }: { data: HeroData }) {
             {line1}
           </h1>
           {line2 && (
-            <p className="mt-3 font-display text-[18px] text-hull-white italic drop-shadow-sm">
+            <p className="mt-3 font-display text-[22px] font-medium text-hull-white drop-shadow-sm">
               {line2}
             </p>
           )}
