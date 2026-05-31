@@ -1,25 +1,25 @@
-// Primary navigation structure (redesign §2.3). Single source of truth for the
-// header, mega menu, and mobile drawer. Each subcategory `slug` resolves to a
-// /collections/<slug> page — those collections are populated by the Shopify
-// collection re-migration (Phase 0). `image` keys map to CMS mega-menu slots
-// (§6.5) and are filled from cms_homepage_content at runtime.
+// Primary navigation structure (redesign v2 §2.3). Single source of truth for
+// the header, mega menu, and mobile drawer. Each subcategory `slug` resolves to
+// a /collections/<slug> page. Collections are seeded as drafts and only appear
+// in nav once published with >=1 product (handled at render time). `imageKey`
+// maps to a CMS mega-menu image slot (§7.7).
 
 export type SubLink = { label: string; slug: string };
 export type MegaColumn = {
   heading: string;
   slug: string; // parent collection slug
-  imageKey: string; // CMS key for the column image (§6.5)
+  imageKey: string; // CMS key for the column image (§7.7)
   links: SubLink[];
 };
 export type NavItem = {
-  label: string;
-  slug: string; // /collections/<slug> landing for the whole gender
+  label: string; // sentence case (Billabong style)
+  slug: string; // gender landing: /collections/<slug>
   columns: MegaColumn[];
 };
 
 export const NAV: NavItem[] = [
   {
-    label: "MEN",
+    label: "Men",
     slug: "men",
     columns: [
       {
@@ -36,11 +36,11 @@ export const NAV: NavItem[] = [
         slug: "mens-tops",
         imageKey: "mega.men.tops",
         links: [
-          { label: "Mens Hoodies", slug: "mens-hoodies" },
-          { label: "Mens Jackets", slug: "mens-jackets" },
-          { label: "Mens Jumpers", slug: "mens-jumpers" },
-          { label: "Mens Polos", slug: "mens-polos" },
-          { label: "Mens Tee's & Tanks", slug: "mens-tees-tanks" },
+          { label: "Hoodies", slug: "mens-hoodies" },
+          { label: "Jackets", slug: "mens-jackets" },
+          { label: "Jumpers", slug: "mens-jumpers" },
+          { label: "Polos", slug: "mens-polos" },
+          { label: "Tee's & Tanks", slug: "mens-tees-tanks" },
         ],
       },
       {
@@ -48,9 +48,9 @@ export const NAV: NavItem[] = [
         slug: "mens-bottoms",
         imageKey: "mega.men.bottoms",
         links: [
-          { label: "Mens Shorts", slug: "mens-shorts" },
-          { label: "Mens Sweatpants", slug: "mens-sweatpants" },
-          { label: "Mens Underwear", slug: "mens-underwear" },
+          { label: "Shorts", slug: "mens-shorts" },
+          { label: "Sweatpants", slug: "mens-sweatpants" },
+          { label: "Underwear", slug: "mens-underwear" },
         ],
       },
       {
@@ -67,7 +67,7 @@ export const NAV: NavItem[] = [
     ],
   },
   {
-    label: "WOMEN",
+    label: "Women",
     slug: "women",
     columns: [
       {
@@ -86,10 +86,10 @@ export const NAV: NavItem[] = [
         slug: "womens-tops",
         imageKey: "mega.women.tops",
         links: [
-          { label: "Women's Tees & Tanks", slug: "womens-tees-tanks" },
-          { label: "Women's Jackets", slug: "womens-jackets" },
-          { label: "Womens Jumper", slug: "womens-jumpers" },
-          { label: "Womens Hoodies", slug: "womens-hoodies" },
+          { label: "Tees & Tanks", slug: "womens-tees-tanks" },
+          { label: "Jackets", slug: "womens-jackets" },
+          { label: "Jumper", slug: "womens-jumpers" },
+          { label: "Hoodies", slug: "womens-hoodies" },
           { label: "Dresses", slug: "dresses" },
         ],
       },
@@ -98,9 +98,9 @@ export const NAV: NavItem[] = [
         slug: "womens-bottoms",
         imageKey: "mega.women.bottoms",
         links: [
-          { label: "Womens Athletic Shorts", slug: "womens-athletic-shorts" },
-          { label: "Womens Sweatpants", slug: "womens-sweatpants" },
-          { label: "Womens Leggings", slug: "womens-leggings" },
+          { label: "Athletic Shorts", slug: "womens-athletic-shorts" },
+          { label: "Sweatpants", slug: "womens-sweatpants" },
+          { label: "Leggings", slug: "womens-leggings" },
         ],
       },
       {
@@ -116,7 +116,7 @@ export const NAV: NavItem[] = [
     ],
   },
   {
-    label: "ACCESSORIES",
+    label: "Accessories",
     slug: "accessories",
     columns: [
       {
@@ -125,12 +125,7 @@ export const NAV: NavItem[] = [
         imageKey: "mega.accessories.bags",
         links: [],
       },
-      {
-        heading: "Towels",
-        slug: "towels",
-        imageKey: "mega.accessories.towels",
-        links: [],
-      },
+      { heading: "Towels", slug: "towels", imageKey: "mega.accessories.towels", links: [] },
       {
         heading: "Hats & Beanies",
         slug: "hats-beanies",
@@ -151,9 +146,9 @@ export const NAV: NavItem[] = [
   },
 ];
 
-// Utility-bar links (§2.1) and footer columns reuse these.
+// Top-bar utility links (§2.1).
 export const UTILITY_LINKS = [
-  { label: "My Account", href: "/account" },
-  { label: "Help & Contact", href: "/help" },
+  { label: "Sign In / Join", href: "/account" },
+  { label: "Help", href: "/help" },
   { label: "Gift Cards", href: "/gift-cards" },
 ];

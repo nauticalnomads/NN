@@ -29,15 +29,14 @@
   --color-faded-denim: var(--accent-sea);
   --color-driftwood-tan: var(--accent-sand);
 
-  /* Fonts — Roxy-inspired system (redesign §1.2), loaded via lib/fonts.ts.
-     display   = Barlow Condensed (nav / section headings, used ALL CAPS)
-     editorial = Barlow 800 (hero / campaign / collection headings)
-     body      = Inter (body, labels, meta, price, SKU)
-     mono is folded into Inter — meta/price/SKU are Inter in the new system. */
-  --font-display: var(--font-barlow-condensed), ui-sans-serif, system-ui, sans-serif;
-  --font-editorial: var(--font-barlow), ui-sans-serif, system-ui, sans-serif;
-  --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  /* Fonts — Billabong-inspired system (redesign v2 §1.2), via lib/fonts.ts.
+     display = Cormorant Garamond (hero / campaign / collection / editorial headings)
+     body    = DM Sans (nav, UI, body, headings 700, meta, price, SKU)
+     editorial aliases to Cormorant; mono folds into DM Sans. */
+  --font-display: var(--font-cormorant), ui-serif, Georgia, serif;
+  --font-editorial: var(--font-cormorant), ui-serif, Georgia, serif;
+  --font-body: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
 
   /* Type scale — Display 1 → Caption (brand bible §9.2) */
   --text-display-1: 4.5rem;

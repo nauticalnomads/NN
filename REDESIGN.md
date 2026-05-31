@@ -1,36 +1,38 @@
-# Nautical Nomads — Roxy-inspired Redesign (phased)
+# Nautical Nomads — Billabong-inspired Redesign (v2, phased)
 
-Tracking the layout/nav/CMS overhaul. Decisions (owner-approved):
+Brief v2 supersedes v1. Reference: **Billabong** (clean geometric sans + elegant serif display).
 
-- Taxonomy: re-migrate the 44 Shopify collections to back the new nav.
-- Scope: full brief, phased, reviewed on the branch preview URL.
-- Fonts: Barlow Condensed / Barlow / Inter (replaces Montserrat/DM Sans/JetBrains).
-- Newsletter signups → Resend Audience.
+Resolved decisions (brief v2 §0):
 
-Defaults agreed for missing data:
+- Fonts: **Cormorant Garamond** (display/hero) + **DM Sans** (nav/body/heading/meta). All of
+  Montserrat / Inter / Barlow / Barlow Condensed / JetBrains Mono removed.
+- Tailwind v4: tokens in `globals.css` `@theme` (no config file).
+- Full feature build (backend in scope): collections taxonomy, CMS, wishlist, newsletter.
+- Newsletter: Resend + Supabase only (insert + Resend welcome email).
+- No SOLD OUT (POD); "NEW" derived from published_at < 30 days; logo stays placeholder.
+- Category strategy: seed taxonomy collections as DRAFTS; owner assigns products via admin;
+  nav shows only published collections with >=1 product; never 404 — graceful "coming soon".
 
-- No stock field → drop "SOLD OUT"; treat all as in stock.
-- "NEW" badge derived from published_at within ~30 days.
-- Logo stays a text placeholder until the Nn SVG is provided.
-- Accessories subcategories + Gift Card product: shells now, specifics later.
+Schema reconciliations (existing repo vs v2 SQL):
 
-## Phases (§10 order)
+- `collections` + `collection_products` already exist (empty) -> ALTER to add gender/parent_slug/
+  status/hero_image_url; keep existing `title` (alias of v2 `name`).
+- v2 `product_variants` -> our table is `variants`.
 
-1. ✅ Design tokens — fonts (Barlow Condensed/Barlow/Inter) + Horizon colour aliases.
-2. 🟡 Header — utility bar + 3-zone main header + sticky + mobile drawer DONE; desktop mega panel in Phase 3.
-3. ⬜ Mega menu — desktop hover + mobile accordion.
-4. ⬜ Footer — newsletter band + tag row + main footer + bottom bar.
-5. ⬜ Homepage sections — hero collage → carousel → 3-col banner → title block → photo strip → trends tiles.
-6. ⬜ Admin CMS tab — "Homepage & Content" managers + cms_homepage_content table + cms-assets bucket.
-7. ⬜ PLP — sub-nav tabs + filter sidebar + product-card hover quick-add.
-8. ⬜ Wishlist — wishlists table + header/card/page UI.
-9. ⬜ Static pages — about, ambassadors, sustainability, blog, gift cards, help, shipping, returns, size guide, legal.
-10. ⬜ QA — WCAG AA, responsiveness, Lighthouse.
+## Phases (brief v2 §12)
 
-Plus Phase 0 (data): re-migrate Shopify collections → collections + collection_products,
-and a static nav config mapping MEN/WOMEN/ACCESSORIES → category → subcategory → collection slug.
+1. 🟡 Foundation — fonts ✅, colour tokens ✅; DB migrations ⬜ (SQL handed to owner).
+2. 🟡 Header & nav — gender bar ✅, main header ✅, desktop mega menu ✅, mobile drawer ✅.
+3. ⬜ Footer — newsletter band + tag row + columns + bottom bar.
+4. ⬜ Homepage — hero collage, carousel, banner, title block, photo strip, tiles.
+5. ⬜ Admin CMS — "Homepage & Content" + "Collections" (incl. bulk product tagger).
+6. ⬜ PLP & product card — collection template, sub-nav, filters, quick-add hover.
+7. ⬜ Wishlist — endpoints + header/card/page, guest localStorage + merge on sign-in.
+8. ⬜ Static pages — all of §9.
+9. ⬜ QA — WCAG AA, responsive, Lighthouse, no regressions, no 404 collections.
 
-## Phase 1 notes
+## Notes
 
-- `lib/fonts.ts`: Barlow Condensed (600/700), Barlow (600/700/800 + italic), Inter (400/500/600/700).
-- `globals.css` `@theme`: `--font-display`=Barlow Condensed, `--font-editorial`=Barlow, `--font-body`/`--font-mono`=Inter; added `terracotta`/`faded-denim`/`driftwood-tan`/`hull-white`/`driftwood`/`deep-ink` colour aliases (same hexes). Existing `surface`/`ink`/`accent-*` tokens kept so current pages don't break.
+- `font-display` (Cormorant) now applies to existing headings site-wide -> headings render serif.
+  Per-component refinement can follow.
+- Storefront header still shows above /admin + /account (pre-existing) — tidy in a later pass.
