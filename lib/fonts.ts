@@ -1,26 +1,32 @@
-import { Montserrat, DM_Sans, JetBrains_Mono } from "next/font/google";
+import { Barlow_Condensed, Barlow, Inter } from "next/font/google";
 
-// Display — headlines, lookbook covers, generous tracking (brand bible §9.2)
-export const montserrat = Montserrat({
+// Roxy-inspired type system (redesign §1.2). Replaces the original
+// Montserrat / DM Sans / JetBrains Mono stack.
+
+// Display / Nav — Barlow Condensed, used ALL CAPS with wide tracking for
+// nav items, section headings, large homepage titles.
+export const barlowCondensed = Barlow_Condensed({
   subsets: ["latin"],
-  variable: "--font-montserrat",
+  variable: "--font-barlow-condensed",
   display: "swap",
+  weight: ["600", "700"],
+});
+
+// Editorial Heading — Barlow 800 ExtraBold for hero/campaign/collection headings.
+export const barlow = Barlow({
+  subsets: ["latin"],
+  variable: "--font-barlow",
+  display: "swap",
+  weight: ["600", "700", "800"],
   style: ["normal", "italic"],
 });
 
-// Body — DM Sans 300–700
-export const dmSans = DM_Sans({
+// Body / Label / Meta — Inter for body copy, labels, prices, SKUs, metadata.
+export const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-dm-sans",
+  variable: "--font-inter",
   display: "swap",
-  weight: ["300", "400", "500", "700"],
+  weight: ["400", "500", "600", "700"],
 });
 
-// Mono — tags, specs, SKUs, metadata ("small honest type")
-export const jetBrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-jetbrains-mono",
-  display: "swap",
-});
-
-export const fontVariables = `${montserrat.variable} ${dmSans.variable} ${jetBrainsMono.variable}`;
+export const fontVariables = `${barlowCondensed.variable} ${barlow.variable} ${inter.variable}`;

@@ -20,10 +20,24 @@
   --color-accent-sea: var(--accent-sea);
   --color-accent-sand: var(--accent-sand);
 
-  /* Fonts (loaded via next/font in lib/fonts.ts) */
-  --font-display: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
-  --font-body: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SFMono-Regular", monospace;
+  /* Redesign §1.1 — friendlier Horizon aliases (same hexes) so components can
+     use `bg-terracotta`, `text-deep-ink`, `border-driftwood-tan`, etc. */
+  --color-hull-white: var(--surface);
+  --color-driftwood: var(--surface-2);
+  --color-deep-ink: var(--ink);
+  --color-terracotta: var(--accent-sun);
+  --color-faded-denim: var(--accent-sea);
+  --color-driftwood-tan: var(--accent-sand);
+
+  /* Fonts — Roxy-inspired system (redesign §1.2), loaded via lib/fonts.ts.
+     display   = Barlow Condensed (nav / section headings, used ALL CAPS)
+     editorial = Barlow 800 (hero / campaign / collection headings)
+     body      = Inter (body, labels, meta, price, SKU)
+     mono is folded into Inter — meta/price/SKU are Inter in the new system. */
+  --font-display: var(--font-barlow-condensed), ui-sans-serif, system-ui, sans-serif;
+  --font-editorial: var(--font-barlow), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 
   /* Type scale — Display 1 → Caption (brand bible §9.2) */
   --text-display-1: 4.5rem;
