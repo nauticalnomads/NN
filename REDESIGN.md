@@ -28,7 +28,7 @@ Schema reconciliations (existing repo vs v2 SQL):
 5. ✅ Admin CMS — "Homepage & Content" tab (hero/carousel/banner/campaign/strip/tiles/mega/footer-tags/newsletter managers, uploads to cms-assets) + "Collections" tab (list, edit+assign, bulk tagger). 47 taxonomy collections seeded as drafts.
 6. ✅ PLP & product card — collection hero + sub-nav tabs + client filter sidebar (colour/size/price/sort) + result count + quick-add hover + NEW badge + wishlist heart; empty collections show graceful coming-soon.
 7. ⬜ Wishlist — endpoints + header/card/page, guest localStorage + merge on sign-in.
-8. ⬜ Static pages — all of §9.
+8. ✅ Static pages — shipping, returns, sustainability, privacy, terms-of-sale, terms-of-use, cookies, gift-cards (CTA shell), ambassadors (CMS grid), help (contact form -> /api/contact + CMS FAQ accordion). About/contact/size-guide/journal already existed; 404 already branded.
 9. ⬜ QA — WCAG AA, responsive, Lighthouse, no regressions, no 404 collections.
 
 ## Notes
