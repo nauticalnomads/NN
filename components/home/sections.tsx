@@ -49,7 +49,7 @@ export function HeroCollage({ data }: { data: HeroData }) {
           {showCta && (
             <Link
               href={ctaUrl}
-              className="mt-7 inline-flex items-center rounded-sm bg-terracotta px-6 py-3 font-body text-[14px] font-medium text-hull-white no-underline transition-opacity hover:opacity-90"
+              className="mt-7 inline-flex items-center rounded-sm bg-terracotta-text px-6 py-3 font-body text-[14px] font-medium text-hull-white no-underline transition-opacity hover:opacity-90"
             >
               {ctaText}
             </Link>
@@ -102,7 +102,7 @@ export function EditorialBanner({ columns }: { columns: BannerColumn[] }) {
                 </p>
                 <Link
                   href={c.url || "/shop"}
-                  className="mt-1 inline-block font-body text-[13px] text-terracotta no-underline hover:underline"
+                  className="mt-1 inline-block font-body text-[13px] text-terracotta-text no-underline hover:underline"
                 >
                   Shop Now →
                 </Link>
@@ -176,7 +176,7 @@ const DEFAULT_TILES: Tile[] = [
 function TileRow({ label, tiles }: { label: string; tiles: Tile[] }) {
   return (
     <div>
-      <p className="mb-3 font-body text-[12px] font-medium text-driftwood-tan">{label}</p>
+      <p className="mb-3 font-body text-[12px] font-medium text-meta">{label}</p>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {tiles.map((t, i) => (
           <Link key={i} href={t.url || "/shop"} className="group block no-underline">
@@ -191,7 +191,7 @@ function TileRow({ label, tiles }: { label: string; tiles: Tile[] }) {
             <p className="mt-2 font-body text-[13px] font-semibold tracking-[0.03em] text-deep-ink">
               {t.label}
             </p>
-            <span className="font-body text-[12px] text-terracotta">View all →</span>
+            <span className="font-body text-[12px] text-terracotta-text">View all →</span>
           </Link>
         ))}
       </div>

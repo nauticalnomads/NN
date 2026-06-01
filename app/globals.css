@@ -28,6 +28,9 @@
   --color-terracotta: var(--accent-sun);
   --color-faded-denim: var(--accent-sea);
   --color-driftwood-tan: var(--accent-sand);
+  /* AA-accessible variants for small text / CTA fills on light surfaces */
+  --color-terracotta-text: var(--accent-sun-text);
+  --color-meta: var(--meta-on-light);
 
   /* Fonts — Billabong-inspired system (redesign v2 §1.2), via lib/fonts.ts.
      display = Cormorant Garamond (hero / campaign / collection / editorial headings)
@@ -59,9 +62,14 @@
   --surface: #faf6ec; /* Hull White */
   --surface-2: #efe8d8; /* Driftwood */
   --ink: #2a2826; /* Deep Ink */
-  --accent-sun: #c75d3e; /* Terracotta */
+  --accent-sun: #c75d3e; /* Terracotta — large/decorative use */
   --accent-sea: #4a6b85; /* Faded Denim */
-  --accent-sand: #b39570; /* Driftwood Tan */
+  --accent-sand: #b39570; /* Driftwood Tan — large/decorative use */
+  /* WCAG-AA accessible variants for SMALL text on light surfaces (the brand
+     Terracotta/Tan fail AA at body size). Used for links, CTA fills + small
+     meta; the originals stay for large headings/decorative fills (≥24px). */
+  --accent-sun-text: #a8492e; /* 5.32:1 on Hull White, 4.70:1 on Driftwood */
+  --meta-on-light: #7e6444; /* tan-ish meta that passes 5.13:1 on Hull White */
 }
 
 /* Tempest — stormier alternate (PROPOSED, pending brand sign-off) */

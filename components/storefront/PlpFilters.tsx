@@ -162,9 +162,7 @@ export function PlpFilters({ products }: { products: ProductWithRelations[] }) {
         >
           Filter
         </button>
-        <p className="ml-auto font-body text-[13px] text-driftwood-tan">
-          {filtered.length} results
-        </p>
+        <p className="ml-auto font-body text-[13px] text-meta">{filtered.length} results</p>
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
@@ -209,7 +207,7 @@ export function PlpFilters({ products }: { products: ProductWithRelations[] }) {
             <button
               type="button"
               onClick={() => setDrawer(false)}
-              className="mt-4 w-full rounded-sm bg-terracotta py-3 font-body text-[14px] font-medium text-hull-white"
+              className="mt-4 w-full rounded-sm bg-terracotta-text py-3 font-body text-[14px] font-medium text-hull-white"
             >
               Show {filtered.length} results
             </button>

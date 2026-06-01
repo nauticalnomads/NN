@@ -39,13 +39,13 @@ export default async function Ambassadors() {
                 )}
               </div>
               <p className="mt-3 font-body text-[15px] font-semibold text-deep-ink">{p.name}</p>
-              {p.role && <p className="font-body text-caption text-driftwood-tan">{p.role}</p>}
+              {p.role && <p className="font-body text-caption text-meta">{p.role}</p>}
               {p.social && (
                 <a
                   href={p.social}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 inline-block font-body text-caption text-terracotta no-underline hover:underline"
+                  className="mt-1 inline-block font-body text-caption text-terracotta-text no-underline hover:underline"
                 >
                   Follow →
                 </a>

@@ -35,7 +35,7 @@ export function FeaturedCarousel({
               type="button"
               aria-label={d === -1 ? "Previous" : "Next"}
               onClick={() => scroll(d as 1 | -1)}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-deep-ink/20 text-deep-ink transition-colors hover:border-terracotta hover:text-terracotta"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-deep-ink/20 text-deep-ink transition-colors hover:border-terracotta hover:text-terracotta-text"
             >
               <svg
                 className="h-4 w-4"

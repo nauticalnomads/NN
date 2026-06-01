@@ -68,11 +68,11 @@ export function ContactForm() {
           className="mt-1 block w-full rounded-sm border border-ink/20 bg-surface px-3 py-2 font-body text-body"
         />
       </label>
-      {state === "error" && <p className="font-body text-caption text-terracotta">{msg}</p>}
+      {state === "error" && <p className="font-body text-caption text-terracotta-text">{msg}</p>}
       <button
         type="submit"
         disabled={state === "loading"}
-        className="rounded-sm bg-terracotta px-6 py-3 font-body text-[14px] font-medium text-hull-white transition-opacity hover:opacity-90 disabled:opacity-50"
+        className="rounded-sm bg-terracotta-text px-6 py-3 font-body text-[14px] font-medium text-hull-white transition-opacity hover:opacity-90 disabled:opacity-50"
       >
         {state === "loading" ? "Sending…" : "Send message"}
       </button>

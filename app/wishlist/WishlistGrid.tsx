@@ -59,7 +59,7 @@ export function WishlistGrid() {
       <div className="rounded-sm border border-dashed border-ink/20 py-20 text-center">
         <p className="font-body text-body text-ink/55">
           Your wishlist is empty.{" "}
-          <Link href="/shop" className="text-terracotta no-underline hover:underline">
+          <Link href="/shop" className="text-terracotta-text no-underline hover:underline">
             Start exploring →
           </Link>
         </p>

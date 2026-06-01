@@ -49,7 +49,7 @@ export function NewsletterForm() {
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         placeholder="Email address"
-        className="h-11 flex-1 rounded-sm border border-deep-ink bg-hull-white px-3 font-body text-[14px] text-deep-ink placeholder:text-driftwood-tan focus:outline-2 focus:outline-offset-2 focus:outline-terracotta"
+        className="h-11 flex-1 rounded-sm border border-deep-ink bg-hull-white px-3 font-body text-[14px] text-deep-ink placeholder:text-meta focus:outline-2 focus:outline-offset-2 focus:outline-terracotta"
       />
       <button
         type="submit"

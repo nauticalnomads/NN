@@ -73,7 +73,7 @@ export function ProductCard({ product }: { product: ProductWithRelations }) {
           </span>
         )}
         {onSale && !isNewProduct && (
-          <span className="absolute top-3 left-3 rounded-full bg-terracotta px-2.5 py-1 font-body text-[10px] font-semibold tracking-wide text-hull-white uppercase">
+          <span className="absolute top-3 left-3 rounded-full bg-terracotta-text px-2.5 py-1 font-body text-[10px] font-semibold tracking-wide text-hull-white uppercase">
             Sale
           </span>
         )}
@@ -84,7 +84,7 @@ export function ProductCard({ product }: { product: ProductWithRelations }) {
           aria-label={wished ? "Remove from wishlist" : "Add to wishlist"}
           aria-pressed={wished}
           onClick={() => toggle({ productId: product.id, variantId: variants[0]?.id ?? null })}
-          className="absolute top-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-hull-white/85 text-deep-ink transition-colors hover:text-terracotta md:opacity-0 md:group-hover:opacity-100"
+          className="absolute top-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-hull-white/85 text-deep-ink transition-colors hover:text-terracotta-text md:opacity-0 md:group-hover:opacity-100"
         >
           <svg
             className="h-[18px] w-[18px]"
@@ -122,7 +122,7 @@ export function ProductCard({ product }: { product: ProductWithRelations }) {
             type="button"
             disabled={!singleVariant && sizes.length > 0 && !size}
             onClick={() => addToCart(singleVariant ? variants[0].id : (size ?? variants[0]?.id))}
-            className="w-full rounded-sm bg-terracotta py-2 font-body text-[13px] font-medium text-hull-white transition-opacity hover:opacity-90 disabled:opacity-40"
+            className="w-full rounded-sm bg-terracotta-text py-2 font-body text-[13px] font-medium text-hull-white transition-opacity hover:opacity-90 disabled:opacity-40"
           >
             {!singleVariant && sizes.length > 0 && !size ? "Select a size" : "Add to cart"}
           </button>
@@ -139,7 +139,7 @@ export function ProductCard({ product }: { product: ProductWithRelations }) {
           </div>
         )}
         <Link href={`/products/${product.slug}`} className="no-underline">
-          <h3 className="font-body text-[14px] font-semibold text-deep-ink hover:text-terracotta">
+          <h3 className="font-body text-[14px] font-semibold text-deep-ink hover:text-terracotta-text">
             {product.title}
           </h3>
         </Link>
