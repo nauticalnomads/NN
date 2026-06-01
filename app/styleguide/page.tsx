@@ -161,18 +161,18 @@ export default function Styleguide() {
       </Section>
 
       <Section title="Fonts">
-        <div className="grid gap-6 sm:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2">
           <div>
-            <p className="font-display text-heading text-ink">Montserrat</p>
-            <p className="font-mono text-caption text-ink/50 uppercase">Display</p>
+            <p className="font-display text-heading text-ink">Cormorant Garamond</p>
+            <p className="font-body text-caption text-ink/50 uppercase">
+              Display / hero / editorial
+            </p>
           </div>
           <div>
             <p className="font-body text-heading text-ink">DM Sans</p>
-            <p className="font-mono text-caption text-ink/50 uppercase">Body</p>
-          </div>
-          <div>
-            <p className="font-mono text-heading text-ink">JetBrains Mono</p>
-            <p className="font-mono text-caption text-ink/50 uppercase">Mono / metadata</p>
+            <p className="font-body text-caption text-ink/50 uppercase">
+              Nav · body · headings · meta
+            </p>
           </div>
         </div>
       </Section>

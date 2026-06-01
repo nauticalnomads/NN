@@ -155,5 +155,42 @@ export async function getCollectionBySlug(
   }
 }
 
+// Fetch published products by id (for the wishlist page, §10). Preserves no
+// particular order; the client orders by its own list.
+export async function getProductsByIds(ids: string[]): Promise<ProductWithRelations[]> {
+  if (!configured() || ids.length === 0) return [];
+  try {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("products")
+      .select("*, variants(*), product_images(*)")
+      .in("id", ids)
+      .eq("status", "published");
+    if (error) throw error;
+    return (data ?? []) as unknown as ProductWithRelations[];
+  } catch {
+    return [];
+  }
+}
+
+// Published sub-collections of a parent slug (for PLP sub-nav tabs, §5.2).
+export async function getChildCollections(
+  parentSlug: string,
+): Promise<{ slug: string; title: string }[]> {
+  if (!configured()) return [];
+  try {
+    const supabase = createPublicClient();
+    const { data } = await supabase
+      .from("collections")
+      .select("slug, title")
+      .eq("parent_slug", parentSlug)
+      .eq("status", "published")
+      .order("sort_order");
+    return (data as unknown as { slug: string; title: string }[]) ?? [];
+  } catch {
+    return [];
+  }
+}
+
 // (primaryImage moved to lib/product.ts so client components can use it
 // without dragging server-only code into their bundle.)

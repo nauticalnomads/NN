@@ -1,11 +1,20 @@
-import Link from "next/link";
 import type { Metadata } from "next";
-import { Container } from "@/components/Container";
-import { ProductGrid } from "@/components/ProductGrid";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { getFeaturedProducts, getCollections } from "@/lib/queries";
+import { getFeaturedProducts } from "@/lib/queries";
+import { getCmsValues } from "@/lib/cms";
 import { websiteLd } from "@/lib/structured-data";
 import { absoluteUrl, site } from "@/lib/site";
+import {
+  HeroCollage,
+  EditorialBanner,
+  CampaignTitle,
+  PhotoStrip,
+  CategoryTiles,
+  type HeroData,
+  type BannerColumn,
+  type Tile,
+} from "@/components/home/sections";
+import { FeaturedCarousel } from "@/components/home/FeaturedCarousel";
 
 export const revalidate = 300;
 
@@ -22,64 +31,44 @@ export const metadata: Metadata = {
 };
 
 export default async function Home() {
-  const [featured, collections] = await Promise.all([getFeaturedProducts(8), getCollections()]);
+  const [featured, cms] = await Promise.all([
+    getFeaturedProducts(12),
+    getCmsValues([
+      "home.hero",
+      "home.banner",
+      "home.campaign",
+      "home.strip",
+      "home.tiles",
+      "home.carousel1",
+    ]),
+  ]);
+
+  const hero = (cms["home.hero"] ?? {}) as HeroData;
+  const banner = ((cms["home.banner"] as { columns?: BannerColumn[] })?.columns ??
+    []) as BannerColumn[];
+  const campaign = (cms["home.campaign"] ?? {}) as {
+    heading?: string;
+    ctaText?: string;
+    ctaUrl?: string;
+  };
+  const strip = ((cms["home.strip"] as { images?: { url?: string; alt?: string }[] })?.images ??
+    []) as { url?: string; alt?: string }[];
+  const tiles = ((cms["home.tiles"] as { tiles?: Tile[] })?.tiles ?? []) as Tile[];
+  const carousel1 = (cms["home.carousel1"] ?? {}) as { heading?: string };
 
   return (
     <>
       <JsonLd data={websiteLd()} />
-      <Container className="py-24 sm:py-32">
-        <p className="font-mono text-xs tracking-[0.3em] text-accent-sea uppercase">
-          Established MMXXIII
-        </p>
-        <h1 className="mt-6 max-w-4xl font-display text-display-1 leading-[1.05] tracking-tight text-ink">
-          Live by the tide.
-        </h1>
-        <p className="mt-8 max-w-xl font-body text-sub leading-relaxed text-ink/80">
-          Coastal lifestyle, printed quietly. We dress people who chase weather, not weekends. Slow
-          design, fewer pieces, built to last.
-        </p>
-        <div className="mt-10 flex flex-wrap items-center gap-4">
-          <Link
-            href="/shop"
-            className="inline-flex items-center rounded-sm bg-accent-sun px-6 py-3 font-mono text-xs tracking-widest text-surface uppercase no-underline transition-opacity hover:opacity-90"
-          >
-            Shop everything
-          </Link>
-          <Link
-            href="/about"
-            className="font-mono text-xs tracking-widest text-ink uppercase underline-offset-4 hover:underline"
-          >
-            Our story →
-          </Link>
-        </div>
-      </Container>
-
-      {collections.length > 0 && (
-        <Container className="pb-8">
-          <div className="flex flex-wrap gap-x-6 gap-y-2 border-y border-ink/10 py-5">
-            <span className="font-mono text-caption tracking-wide text-ink/50 uppercase">
-              Collections
-            </span>
-            {collections.map((c) => (
-              <Link
-                key={c.id}
-                href={`/collections/${c.slug}`}
-                className="font-mono text-caption tracking-wide text-ink uppercase underline-offset-4 hover:text-accent-sun hover:underline"
-              >
-                {c.title}
-              </Link>
-            ))}
-          </div>
-        </Container>
-      )}
-
-      <Container className="py-16">
-        <h2 className="mb-10 font-display text-display-2 tracking-tight text-ink">Featured</h2>
-        <ProductGrid
-          products={featured}
-          emptyMessage="The catalogue lands once products are migrated. Check back soon."
-        />
-      </Container>
+      <HeroCollage data={hero} />
+      <FeaturedCarousel heading={carousel1.heading || "New Arrivals"} products={featured} />
+      <EditorialBanner columns={banner} />
+      <CampaignTitle
+        heading={campaign.heading}
+        ctaText={campaign.ctaText}
+        ctaUrl={campaign.ctaUrl}
+      />
+      <PhotoStrip images={strip} />
+      <CategoryTiles tiles={tiles} />
     </>
   );
 }

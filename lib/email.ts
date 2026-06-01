@@ -194,3 +194,16 @@ export async function sendOwnerAlert(subject: string, body: string) {
     ),
   );
 }
+
+// ── NEWSLETTER WELCOME / 10% OFF (redesign v2 §3.5) ──────────────────────────
+export async function sendNewsletterWelcome(email: string, code: string) {
+  const body = `
+    <p>Welcome aboard — you're on the list for new arrivals, stories, and the odd quiet offer.</p>
+    <p>Here's <strong>10% off</strong> your first order:</p>
+    <p style="margin:20px 0">
+      <span style="display:inline-block;border:1px dashed #C75D3E;color:#C75D3E;font-family:ui-monospace,monospace;font-size:20px;letter-spacing:2px;padding:12px 20px">${code}</span>
+    </p>
+    <p>Use it at checkout. One use per customer.</p>
+    <p style="margin-top:24px"><a href="${absoluteUrl("/shop")}" style="color:#C75D3E">Start exploring →</a></p>`;
+  return send(email, "Welcome to Nautical Nomads — 10% off", shell("Welcome aboard.", body));
+}
