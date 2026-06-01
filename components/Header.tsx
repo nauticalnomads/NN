@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { useCart } from "@/components/cart/CartProvider";
+import { useWishlist } from "@/components/wishlist/WishlistProvider";
 import { NAV, UTILITY_LINKS, type NavItem } from "@/lib/navigation";
 
 // ── inline icons ─────────────────────────────────────────────────────────────
@@ -18,11 +19,6 @@ const Person = () => (
   <svg className={ico} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
     <circle cx="12" cy="8" r="4" />
     <path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6" strokeLinecap="round" />
-  </svg>
-);
-const Heart = () => (
-  <svg className={ico} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-    <path d="M12 20s-7-4.4-7-9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 7 3.5C19 15.6 12 20 12 20Z" />
   </svg>
 );
 const Bag = () => (
@@ -44,6 +40,33 @@ function CartButton() {
       {itemCount > 0 && (
         <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-terracotta px-1 font-body text-[10px] leading-none font-semibold text-hull-white">
           {itemCount}
+        </span>
+      )}
+    </Link>
+  );
+}
+
+function WishlistIcon() {
+  const { count } = useWishlist();
+  return (
+    <Link
+      href="/wishlist"
+      aria-label={`Wishlist, ${count} item${count === 1 ? "" : "s"}`}
+      className="relative text-deep-ink transition-colors hover:text-terracotta"
+    >
+      <svg
+        className={ico}
+        viewBox="0 0 24 24"
+        fill={count > 0 ? "currentColor" : "none"}
+        stroke="currentColor"
+        strokeWidth="1.6"
+        style={count > 0 ? { color: "var(--accent-sun)" } : undefined}
+      >
+        <path d="M12 20s-7-4.4-7-9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 7 3.5C19 15.6 12 20 12 20Z" />
+      </svg>
+      {count > 0 && (
+        <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-terracotta px-1 font-body text-[10px] leading-none font-semibold text-hull-white">
+          {count}
         </span>
       )}
     </Link>
@@ -221,13 +244,7 @@ export function Header() {
             >
               <Person />
             </Link>
-            <Link
-              href="/wishlist"
-              aria-label="Wishlist"
-              className="text-deep-ink hover:text-terracotta"
-            >
-              <Heart />
-            </Link>
+            <WishlistIcon />
             <CartButton />
           </div>
         </div>
