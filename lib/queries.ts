@@ -155,5 +155,24 @@ export async function getCollectionBySlug(
   }
 }
 
+// Published sub-collections of a parent slug (for PLP sub-nav tabs, §5.2).
+export async function getChildCollections(
+  parentSlug: string,
+): Promise<{ slug: string; title: string }[]> {
+  if (!configured()) return [];
+  try {
+    const supabase = createPublicClient();
+    const { data } = await supabase
+      .from("collections")
+      .select("slug, title")
+      .eq("parent_slug", parentSlug)
+      .eq("status", "published")
+      .order("sort_order");
+    return (data as unknown as { slug: string; title: string }[]) ?? [];
+  } catch {
+    return [];
+  }
+}
+
 // (primaryImage moved to lib/product.ts so client components can use it
 // without dragging server-only code into their bundle.)

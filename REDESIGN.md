@@ -26,7 +26,7 @@ Schema reconciliations (existing repo vs v2 SQL):
 3. ✅ Footer — newsletter band (Resend wired) + scrolling tag row (CMS) + 3 columns + bottom bar.
 4. ✅ Homepage — hero collage + featured carousel + 3-col banner + campaign title + photo strip + New Arrivals tiles (all CMS-driven, Driftwood placeholders).
 5. ✅ Admin CMS — "Homepage & Content" tab (hero/carousel/banner/campaign/strip/tiles/mega/footer-tags/newsletter managers, uploads to cms-assets) + "Collections" tab (list, edit+assign, bulk tagger). 47 taxonomy collections seeded as drafts.
-6. ⬜ PLP & product card — collection template, sub-nav, filters, quick-add hover.
+6. ✅ PLP & product card — collection hero + sub-nav tabs + client filter sidebar (colour/size/price/sort) + result count + quick-add hover + NEW badge + wishlist heart; empty collections show graceful coming-soon.
 7. ⬜ Wishlist — endpoints + header/card/page, guest localStorage + merge on sign-in.
 8. ⬜ Static pages — all of §9.
 9. ⬜ QA — WCAG AA, responsive, Lighthouse, no regressions, no 404 collections.
