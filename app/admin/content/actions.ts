@@ -4,24 +4,11 @@ import { revalidatePath } from "next/cache";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { setCmsValue } from "@/lib/cms";
+import { uploadImage } from "@/lib/storage";
 
 // Homepage & Content CMS actions (redesign v2 §7). Content admin may manage
 // homepage content (matrix §3 puts pages/products/social under content role).
-
-// Upload an image to the cms-assets bucket, return its public URL.
-async function uploadImage(file: File, keyHint: string): Promise<string | null> {
-  if (!file || file.size === 0) return null;
-  const sb = createServiceClient();
-  const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
-  const path = `${keyHint}/${Date.now()}.${ext}`;
-  const buf = new Uint8Array(await file.arrayBuffer());
-  const { error } = await sb.storage
-    .from("cms-assets")
-    .upload(path, buf, { contentType: file.type || "image/jpeg", upsert: true });
-  if (error) return null;
-  const { data } = sb.storage.from("cms-assets").getPublicUrl(path);
-  return data.publicUrl;
-}
+// Images are auto-cropped client-side (ImageSlot) before upload.
 
 // Generic: read current value, merge an image slot + alt, save under `key`.
 // `slot` is a dotted path within the value (e.g. "left", "columns.0").

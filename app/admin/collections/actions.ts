@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
+import { uploadImage } from "@/lib/storage";
 
 // Collections admin (redesign v2 §8). Create/edit collections, assign products,
 // bulk-tag ungrouped products. Content admin may manage products/collections.
@@ -11,7 +12,7 @@ export async function saveCollection(formData: FormData): Promise<void> {
   await requireStaff();
   const id = String(formData.get("id") || "");
   const sb = createServiceClient();
-  const patch = {
+  const patch: Record<string, unknown> = {
     title: String(formData.get("title") || "").trim(),
     gender: (String(formData.get("gender") || "") || null) as string | null,
     parent_slug: (String(formData.get("parent_slug") || "") || null) as string | null,
@@ -19,12 +20,24 @@ export async function saveCollection(formData: FormData): Promise<void> {
     seo_title: String(formData.get("seo_title") || "").trim() || null,
     seo_description: String(formData.get("seo_description") || "").trim() || null,
   };
+
+  // Cover photo (auto-cropped client-side). Upload a new file, clear it, or
+  // leave the existing one untouched when neither was supplied.
+  const heroFile = formData.get("hero_file") as File | null;
+  if (formData.get("hero_remove") === "on") {
+    patch.hero_image_url = null;
+  } else if (heroFile && heroFile.size && id) {
+    const url = await uploadImage(heroFile, `collections/${id}`);
+    if (url) patch.hero_image_url = url;
+  }
+
   if (id) {
     await sb
       .from("collections")
       .update(patch as never)
       .eq("id", id);
     revalidatePath(`/admin/collections/${id}`);
+    revalidatePath(`/collections/${String(formData.get("slug") || "")}`);
   }
   revalidatePath("/admin/collections");
   revalidatePath("/");
