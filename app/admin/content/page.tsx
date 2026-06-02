@@ -1,9 +1,9 @@
-import Image from "next/image";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getCmsValues } from "@/lib/cms";
 import { NAV } from "@/lib/navigation";
 import { FooterTagEditor } from "./FooterTagEditor";
+import { ImageSlot } from "./ImageSlot";
 import {
   saveHero,
   saveBanner,
@@ -58,47 +58,6 @@ function Text({
         className="mt-1.5 block w-full rounded-sm border border-ink/20 bg-surface px-3 py-2 font-body text-body"
       />
     </label>
-  );
-}
-function ImageSlot({
-  name,
-  label,
-  current,
-  rec,
-}: {
-  name: string;
-  label: string;
-  current?: string;
-  rec?: string;
-}) {
-  // When `name` is empty (mega-menu single-image forms) the inputs are just
-  // `file`/`alt`; otherwise they're `<name>_file` / `<name>_alt`.
-  const fileName = name ? `${name}_file` : "file";
-  const altName = name ? `${name}_alt` : "alt";
-  return (
-    <div className="rounded-sm border border-ink/10 p-3">
-      <p className="font-mono text-caption tracking-wide text-ink/60 uppercase">{label}</p>
-      <div className="mt-2 flex gap-3">
-        <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-sm bg-driftwood">
-          {current && <Image src={current} alt="" fill unoptimized className="object-cover" />}
-        </div>
-        <div className="flex-1 space-y-2">
-          <input
-            type="file"
-            name={fileName}
-            accept="image/*"
-            className="block w-full font-body text-caption text-ink/70 file:mr-3 file:rounded-sm file:border-0 file:bg-ink file:px-3 file:py-1.5 file:font-mono file:text-xs file:tracking-widest file:text-surface file:uppercase"
-          />
-          {rec && <p className="font-mono text-[11px] text-ink/40">{rec}</p>}
-          <input
-            type="text"
-            name={altName}
-            placeholder="Alt text (required)"
-            className="block w-full rounded-sm border border-ink/20 bg-surface px-2 py-1.5 font-body text-caption"
-          />
-        </div>
-      </div>
-    </div>
   );
 }
 function Save({ label = "Save" }: { label?: string }) {

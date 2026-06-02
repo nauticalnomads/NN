@@ -90,20 +90,69 @@ function blogSlug(title: string) {
   );
 }
 
-// Fetch a URL and use Anthropic to write a brand-voice draft from it.
-export async function draftFromUrl(url: string) {
-  let body = "";
+// Pull a usable title/description/body out of raw HTML (best-effort, no deps).
+function extractPage(html: string) {
+  const pick = (re: RegExp) => {
+    const m = html.match(re);
+    return m ? decodeEntities(m[1].trim()) : "";
+  };
+  const title =
+    pick(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
+    pick(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const description =
+    pick(
+      /<meta[^>]+(?:property|name)=["'](?:og:description|description)["'][^>]+content=["']([^"']+)["']/i,
+    ) ||
+    pick(
+      /<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:description|description)["']/i,
+    );
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return { title, description, text: decodeEntities(text).slice(0, 8000) };
+}
+
+function decodeEntities(s: string) {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&rsquo;|&apos;/g, "'")
+    .replace(/&nbsp;/g, " ");
+}
+
+// Fetch a URL and draft a brand-voice blog post from it. Uses Anthropic when
+// ANTHROPIC_API_KEY is configured; otherwise falls back to the page's own
+// title + text so a draft always has real content to edit. Returns a status the
+// admin UI surfaces.
+export async function draftFromUrl(url: string): Promise<{
+  ok: boolean;
+  id?: string;
+  title?: string;
+  status: "ai" | "scraped" | "fetch_failed" | "insert_failed";
+}> {
+  let page = { title: "", description: "", text: "" };
+  let fetched = false;
   try {
-    const r = await fetch(url, { redirect: "follow" });
-    if (r.ok)
-      body = (await r.text())
-        .replace(/<script[\s\S]*?<\/script>/g, "")
-        .replace(/<style[\s\S]*?<\/style>/g, "")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .slice(0, 8000);
+    const r = await fetch(url, {
+      redirect: "follow",
+      headers: {
+        // Many sites 403 a bare server-side fetch without a browser-like UA.
+        "User-Agent":
+          "Mozilla/5.0 (compatible; NauticalNomadsBot/1.0; +https://nautical-nomads.com)",
+        Accept: "text/html,application/xhtml+xml",
+      },
+    });
+    if (r.ok) {
+      page = extractPage(await r.text());
+      fetched = !!page.text;
+    }
   } catch {
-    /* skip */
+    /* network/DNS failure — fall through to the URL-only draft */
   }
 
   const sb = createServiceClient();
@@ -114,7 +163,8 @@ export async function draftFromUrl(url: string) {
     .maybeSingle();
   const voice = (settingsData as unknown as { brand_voice: string } | null)?.brand_voice || "";
 
-  const prompt = `Source page content:\n\n${body || `(could not fetch; the URL is ${url})`}\n\nWrite a 250-400 word blog post in our voice based on this. Return ONLY JSON: { "title": "...", "body": "markdown", "seo_title": "...", "seo_description": "..." }`;
+  const source = page.text || page.description;
+  const prompt = `Source page title: ${page.title || "(unknown)"}\nSource URL: ${url}\n\nSource page content:\n\n${source || "(could not fetch the page content)"}\n\nWrite a 250-400 word blog post in our voice based on this. Return ONLY JSON: { "title": "...", "body": "markdown", "seo_title": "...", "seo_description": "..." }`;
   const raw = await complete(prompt, `You write in Nautical Nomads' brand voice.\n\n${voice}`);
 
   let parsed: { title: string; body: string; seo_title: string; seo_description: string } | null =
@@ -124,24 +174,37 @@ export async function draftFromUrl(url: string) {
       const m = raw.match(/\{[\s\S]*\}/);
       if (m) parsed = JSON.parse(m[0]);
     } catch {
-      /* ignore */
+      /* model returned non-JSON — fall back to scraped content */
     }
   }
-  const title = parsed?.title ?? "Draft from URL";
+
+  // Fallback draft: never empty when we managed to read the page. The editor can
+  // polish it; AI just turns this into finished copy when the key is set.
+  const fallbackTitle = page.title || "Draft from URL";
+  const fallbackBody = page.text
+    ? `> Drafted from [the source](${url}). Edit before publishing.\n\n${page.description ? page.description + "\n\n" : ""}${page.text.slice(0, 2000)}`
+    : `> Could not reach **${url}** to read its content. Write the post here, or check the link.`;
+
+  const title = parsed?.title ?? fallbackTitle;
   const draft = {
     title,
     slug: blogSlug(title),
-    body: parsed?.body ?? "",
+    body: parsed?.body ?? fallbackBody,
+    excerpt: parsed?.seo_description ?? page.description ?? "",
     seo_title: parsed?.seo_title ?? title,
-    seo_description: parsed?.seo_description ?? "",
+    seo_description: parsed?.seo_description ?? page.description ?? "",
     status: "draft" as const,
     trigger: "manual_url" as const,
     source_url: url,
   };
-  const { data } = await sb
+  const { data, error } = await sb
     .from("blog_posts")
     .insert(draft as never)
     .select("id")
     .single();
-  return { id: (data as unknown as { id: string } | null)?.id, title };
+  if (error) return { ok: false, status: "insert_failed" };
+
+  const id = (data as unknown as { id: string } | null)?.id;
+  const status = parsed ? "ai" : fetched ? "scraped" : "fetch_failed";
+  return { ok: true, id, title, status };
 }

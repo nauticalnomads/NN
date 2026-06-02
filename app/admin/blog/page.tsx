@@ -2,8 +2,30 @@ import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { draftFromUrlAction, publishDraft, discardDraft } from "./actions";
 
-export default async function AdminBlog() {
+const STATUS_MSG: Record<string, { text: string; tone: "ok" | "warn" }> = {
+  ai: { text: "Draft written from the URL with AI. Review it below, then Publish.", tone: "ok" },
+  scraped: {
+    text: "Draft created from the page's text (AI key not set — set ANTHROPIC_API_KEY on the worker for finished copy). Edit it below.",
+    tone: "warn",
+  },
+  fetch_failed: {
+    text: "Couldn't read that URL (it may block bots). A draft stub was created — write or fix the link.",
+    tone: "warn",
+  },
+  insert_failed: {
+    text: "Draft could not be saved. If this persists, run `notify pgrst, 'reload schema';` in Supabase.",
+    tone: "warn",
+  },
+};
+
+export default async function AdminBlog({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
   await requireStaff();
+  const { status } = await searchParams;
+  const banner = status ? STATUS_MSG[status] : undefined;
   const sb = createServiceClient();
   const { data } = await sb
     .from("blog_posts")
@@ -29,6 +51,18 @@ export default async function AdminBlog() {
         Drafts auto-queue when products are published or go on sale. You can also paste a URL to
         draft from.
       </p>
+
+      {banner && (
+        <div
+          className={`mt-6 rounded-sm border px-4 py-3 font-body text-caption ${
+            banner.tone === "ok"
+              ? "border-accent-sea/30 bg-accent-sea/5 text-ink"
+              : "border-accent-sun/40 bg-accent-sun/5 text-ink"
+          }`}
+        >
+          {banner.text}
+        </div>
+      )}
 
       <form action={draftFromUrlAction} className="mt-8 flex gap-3 border-y border-ink/10 py-5">
         <input

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
+import { ImageSlot } from "../../content/ImageSlot";
 import { saveCollection, assignProduct, unassignProduct } from "../actions";
 
 type Collection = {
@@ -13,6 +14,7 @@ type Collection = {
   status: string;
   seo_title: string | null;
   seo_description: string | null;
+  hero_image_url: string | null;
 };
 
 export default async function CollectionEdit({
@@ -76,6 +78,21 @@ export default async function CollectionEdit({
         {/* Details */}
         <form action={saveCollection} className="space-y-4">
           <input type="hidden" name="id" value={c.id} />
+          <input type="hidden" name="slug" value={c.slug} />
+          <div className="space-y-2">
+            <ImageSlot
+              name="hero"
+              label="Cover photo"
+              current={c.hero_image_url ?? undefined}
+              rec="1600×600px"
+            />
+            {c.hero_image_url && (
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="hero_remove" className="h-4 w-4 accent-accent-sun" />
+                <span className="font-body text-caption text-ink/60">Remove current cover</span>
+              </label>
+            )}
+          </div>
           <Field label="Name">
             <input name="title" defaultValue={c.title} className={input} />
           </Field>
