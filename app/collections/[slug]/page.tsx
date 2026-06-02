@@ -5,15 +5,15 @@ import { notFound } from "next/navigation";
 import { Container } from "@/components/Container";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { PlpFilters } from "@/components/storefront/PlpFilters";
-import { getCollectionBySlug, getCollections, getChildCollections } from "@/lib/queries";
+import { getCollectionBySlug, getChildCollections } from "@/lib/queries";
 import { breadcrumbLd } from "@/lib/structured-data";
 import { absoluteUrl } from "@/lib/site";
 
-export const revalidate = 300;
-
-export async function generateStaticParams() {
-  return (await getCollections()).map((c) => ({ slug: c.slug }));
-}
+// Rendered per-request. We deliberately do NOT prerender via generateStaticParams:
+// with zero published collections that returns an empty list, and an ISR route
+// with no prerendered fallback 500s on the Cloudflare Workers adapter for every
+// path (incl. notFound). Dynamic rendering reads live data and 404s cleanly.
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
