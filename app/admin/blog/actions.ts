@@ -42,6 +42,7 @@ export async function saveBlogPost(formData: FormData) {
     excerpt: String(formData.get("excerpt") || "").trim() || null,
     seo_title: String(formData.get("seo_title") || "").trim() || null,
     seo_description: String(formData.get("seo_description") || "").trim() || null,
+    source_url: String(formData.get("source_url") || "").trim() || null,
     updated_at: new Date().toISOString(),
   };
 

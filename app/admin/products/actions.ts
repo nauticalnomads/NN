@@ -35,6 +35,61 @@ export async function setProductStatus(formData: FormData): Promise<void> {
   revalidatePath("/admin/products");
 }
 
+// Set a product's category from the products list dropdown. Updates
+// category_slug + gender, and re-links the product to that collection and all
+// its ancestors (so every level's collection page populates). Replaces any
+// previous category links so the choice is authoritative.
+export async function setProductCategory(formData: FormData): Promise<void> {
+  await requireStaff();
+  const productId = String(formData.get("product_id") || "");
+  const categorySlug = String(formData.get("category_slug") || "").trim();
+  if (!productId) return;
+  const sb = createServiceClient();
+
+  if (!categorySlug) {
+    await sb.from("collection_products").delete().eq("product_id", productId);
+    await sb
+      .from("products")
+      .update({ category_slug: null } as never)
+      .eq("id", productId);
+    revalidatePath("/admin/products");
+    return;
+  }
+
+  const { data: cols } = await sb.from("collections").select("id, slug, parent_slug, gender");
+  const all =
+    (cols as unknown as {
+      id: string;
+      slug: string;
+      parent_slug: string | null;
+      gender: string | null;
+    }[]) ?? [];
+  const bySlug = Object.fromEntries(all.map((c) => [c.slug, c]));
+  const target = bySlug[categorySlug];
+  if (!target) return;
+
+  const chain: string[] = [];
+  let cur: string | null = categorySlug;
+  while (cur && bySlug[cur]) {
+    chain.push(bySlug[cur].id);
+    cur = bySlug[cur].parent_slug;
+  }
+
+  await sb
+    .from("products")
+    .update({ category_slug: categorySlug, gender: target.gender } as never)
+    .eq("id", productId);
+  await sb.from("collection_products").delete().eq("product_id", productId);
+  await sb
+    .from("collection_products")
+    .upsert(chain.map((collection_id) => ({ collection_id, product_id: productId })) as never, {
+      onConflict: "collection_id,product_id",
+    });
+
+  revalidatePath("/admin/products");
+  revalidatePath("/admin/collections");
+}
+
 // Edit a product's price/sale/status/SEO from /admin/products/[id]. Fires the
 // blog auto-queue on a draft→published transition and on a newly-on-sale
 // transition (price drops below compare_at_price). De-dup lives in lib/blog.

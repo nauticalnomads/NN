@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { draftFromUrlAction, publishDraft, discardDraft } from "./actions";
@@ -31,7 +32,7 @@ export default async function AdminBlog({
   const sb = createServiceClient();
   const { data } = await sb
     .from("blog_posts")
-    .select("id, title, slug, status, trigger, created_at")
+    .select("id, title, slug, status, trigger, created_at, excerpt, cover_image_url, source_url")
     .order("created_at", { ascending: false })
     .limit(50);
   const rows =
@@ -42,6 +43,9 @@ export default async function AdminBlog({
       status: string;
       trigger: string | null;
       created_at: string;
+      excerpt: string | null;
+      cover_image_url: string | null;
+      source_url: string | null;
     }>) || [];
   const drafts = rows.filter((r) => r.status === "draft");
   const others = rows.filter((r) => r.status !== "draft");
@@ -88,13 +92,26 @@ export default async function AdminBlog({
             key={d.id}
             className="flex items-center justify-between rounded-sm border border-ink/10 p-4"
           >
-            <div>
-              <p className="font-body text-body text-ink">{d.title}</p>
-              <p className="font-mono text-caption text-ink/50">
-                {d.trigger ?? "manual"} · {new Date(d.created_at).toLocaleDateString()}
-              </p>
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-sm bg-driftwood">
+                {d.cover_image_url && (
+                  <Image src={d.cover_image_url} alt="" fill unoptimized className="object-cover" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="font-body text-body text-ink">{d.title}</p>
+                {d.excerpt && (
+                  <p className="mt-0.5 line-clamp-2 font-body text-caption text-ink/60">
+                    {d.excerpt}
+                  </p>
+                )}
+                <p className="mt-0.5 font-mono text-caption text-ink/45">
+                  {d.trigger ?? "manual"} · {new Date(d.created_at).toLocaleDateString()}
+                  {d.source_url && <> · {d.source_url}</>}
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex shrink-0 items-center gap-3">
               <Link
                 href={`/admin/blog/${d.id}`}
                 className="font-mono text-caption tracking-widest text-ink uppercase no-underline underline-offset-4 hover:underline"
@@ -130,15 +147,27 @@ export default async function AdminBlog({
             key={p.id}
             className="flex items-center justify-between rounded-sm border border-ink/10 p-4"
           >
-            <div>
-              <p className="font-body text-body text-ink">{p.title}</p>
-              <p className="font-mono text-caption text-ink/50">
-                {p.status} · /journal/{p.slug}
-              </p>
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-sm bg-driftwood">
+                {p.cover_image_url && (
+                  <Image src={p.cover_image_url} alt="" fill unoptimized className="object-cover" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="font-body text-body text-ink">{p.title}</p>
+                {p.excerpt && (
+                  <p className="mt-0.5 line-clamp-2 font-body text-caption text-ink/60">
+                    {p.excerpt}
+                  </p>
+                )}
+                <p className="mt-0.5 font-mono text-caption text-ink/45">
+                  {p.status} · /journal/{p.slug}
+                </p>
+              </div>
             </div>
             <Link
               href={`/admin/blog/${p.id}`}
-              className="font-mono text-caption tracking-widest text-ink uppercase no-underline underline-offset-4 hover:underline"
+              className="shrink-0 font-mono text-caption tracking-widest text-ink uppercase no-underline underline-offset-4 hover:underline"
             >
               Edit
             </Link>
