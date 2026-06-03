@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { useCart } from "@/components/cart/CartProvider";
 import { useWishlist } from "@/components/wishlist/WishlistProvider";
-import { NAV, UTILITY_LINKS, type NavItem } from "@/lib/navigation";
+import { UTILITY_LINKS } from "@/lib/navigation";
+import type { NavRoot } from "@/lib/nav-data";
 
 // ── inline icons ─────────────────────────────────────────────────────────────
 const ico = "h-[22px] w-[22px]";
@@ -104,9 +105,7 @@ function GenderToggle({
   );
 }
 
-type MegaImage = { url?: string; alt?: string };
-
-export function Header({ megaImages = {} }: { megaImages?: Record<string, MegaImage> }) {
+export function Header({ nav = [] }: { nav?: NavRoot[] }) {
   const [scrolled, setScrolled] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>(null);
@@ -151,7 +150,7 @@ export function Header({ megaImages = {} }: { megaImages?: Record<string, MegaIm
     closeTimer.current = setTimeout(() => setActiveMega(null), 150);
   };
 
-  const activeItem: NavItem | undefined = NAV.find((n) => n.slug === activeMega);
+  const activeItem = nav.find((n) => n.slug === activeMega);
 
   return (
     <header className="sticky top-0 z-50">
@@ -211,7 +210,7 @@ export function Header({ megaImages = {} }: { megaImages?: Record<string, MegaIm
 
           {/* Centre: nav (desktop) */}
           <nav className="hidden md:flex md:items-center md:gap-8">
-            {NAV.map((item) => (
+            {nav.map((item) => (
               <div key={item.slug} onMouseEnter={() => enterNav(item.slug)}>
                 <Link
                   href={`/collections/${item.slug}`}
@@ -252,7 +251,7 @@ export function Header({ megaImages = {} }: { megaImages?: Record<string, MegaIm
         </div>
 
         {/* Desktop mega menu (§2.3) */}
-        {activeItem && (
+        {activeItem && activeItem.columns.length > 0 && (
           <div
             className="absolute inset-x-0 top-full hidden border-t border-driftwood bg-hull-white shadow-[0_12px_24px_rgba(42,40,38,0.08)] md:block"
             onMouseEnter={() => {
@@ -260,17 +259,22 @@ export function Header({ megaImages = {} }: { megaImages?: Record<string, MegaIm
             }}
             onMouseLeave={leaveNav}
           >
-            <div className="mx-auto grid max-w-[1400px] grid-cols-4 gap-8 px-6 py-8">
+            <div
+              className="mx-auto grid max-w-[1400px] gap-8 px-6 py-8"
+              style={{
+                gridTemplateColumns: `repeat(${Math.min(activeItem.columns.length, 4)}, minmax(0, 1fr))`,
+              }}
+            >
               {activeItem.columns.map((col) => (
                 <div key={col.slug}>
-                  {/* 16:9 image — Driftwood placeholder until CMS image set (§7.7) */}
+                  {/* 16:9 image — the category's cover photo; Driftwood placeholder until set */}
                   <Link href={`/collections/${col.slug}`} className="block">
                     <div className="aspect-video w-full overflow-hidden rounded bg-driftwood">
-                      {megaImages[col.imageKey]?.url && (
+                      {col.image && (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={megaImages[col.imageKey]!.url}
-                          alt={megaImages[col.imageKey]?.alt || col.heading}
+                          src={col.image}
+                          alt={col.heading}
                           className="h-full w-full object-cover"
                         />
                       )}
@@ -335,7 +339,7 @@ export function Header({ megaImages = {} }: { megaImages?: Record<string, MegaIm
             </div>
 
             <nav className="flex-1 overflow-y-auto px-2 py-2">
-              {NAV.map((item) => {
+              {nav.map((item) => {
                 const open = openSection === item.slug;
                 return (
                   <div key={item.slug} className="border-b border-driftwood/60">
