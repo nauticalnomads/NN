@@ -60,6 +60,41 @@ function Text({
     </label>
   );
 }
+// Link target picker — a dropdown of existing collections (+ Home / Shop). Keeps
+// any pre-existing custom value selectable so saved links aren't lost.
+function LinkField({
+  name,
+  label,
+  def = "",
+  options,
+}: {
+  name: string;
+  label: string;
+  def?: string;
+  options: { value: string; label: string }[];
+}) {
+  const known = new Set(["", "/", "/shop", ...options.map((o) => o.value)]);
+  return (
+    <label className="block">
+      <span className="font-mono text-caption tracking-wide text-ink/60 uppercase">{label}</span>
+      <select
+        name={name}
+        defaultValue={def}
+        className="mt-1.5 block w-full rounded-sm border border-ink/20 bg-surface px-3 py-2 font-body text-body"
+      >
+        <option value="">— No link —</option>
+        <option value="/">Home (/)</option>
+        <option value="/shop">All products (/shop)</option>
+        {def && !known.has(def) && <option value={def}>{def} (current)</option>}
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 function Save({ label = "Save" }: { label?: string }) {
   return (
     <button className="mt-4 rounded-sm bg-accent-sun px-5 py-2.5 font-mono text-xs tracking-widest text-surface uppercase">
@@ -98,14 +133,28 @@ export default async function AdminContent() {
   );
   const megaVals = await getCmsValues(megaKeys.map((m) => m.key));
 
-  // Published collections for the carousel picker.
+  // Published collections — for the carousel picker and the link dropdowns.
   const sb = createServiceClient();
   const { data: pub } = await sb
     .from("collections")
-    .select("slug, title")
+    .select("slug, title, parent_slug, gender")
     .eq("status", "published")
+    .order("gender")
     .order("title");
-  const collections = (pub as unknown as { slug: string; title: string }[]) ?? [];
+  const collections =
+    (pub as unknown as {
+      slug: string;
+      title: string;
+      parent_slug: string | null;
+      gender: string | null;
+    }[]) ?? [];
+  // Readable link options: "/collections/<slug>" with a breadcrumb-ish label.
+  const titleBySlug = Object.fromEntries(collections.map((c) => [c.slug, c.title]));
+  const linkOptions = collections.map((c) => {
+    const parent = c.parent_slug ? titleBySlug[c.parent_slug] : "";
+    const label = parent ? `${parent} › ${c.title}` : c.title;
+    return { value: `/collections/${c.slug}`, label };
+  });
 
   const hero = (cms["home.hero"] ?? {}) as V;
   const heroImg = (k: string) => (hero[k] as { url?: string; alt?: string }) ?? {};
@@ -169,7 +218,12 @@ export default async function AdminContent() {
               def={get(hero, "ctaText")}
               placeholder="Shop the collection"
             />
-            <Text name="ctaUrl" label="CTA URL" def={get(hero, "ctaUrl")} placeholder="/shop" />
+            <LinkField
+              name="ctaUrl"
+              label="CTA link"
+              def={get(hero, "ctaUrl")}
+              options={linkOptions}
+            />
           </div>
           <Toggle name="ctaShow" label="Show CTA button" def={hero.ctaShow !== false} />
           <Save />
@@ -227,7 +281,12 @@ export default async function AdminContent() {
                   />
                   <Toggle name={`col${i}_overlay`} label="Overlay" def={!!c.overlay} />
                   <Text name={`col${i}_heading`} label="Heading" def={get(c, "heading")} />
-                  <Text name={`col${i}_url`} label="Link URL" def={get(c, "url")} />
+                  <LinkField
+                    name={`col${i}_url`}
+                    label="Link"
+                    def={get(c, "url")}
+                    options={linkOptions}
+                  />
                 </div>
               );
             })}
@@ -252,7 +311,12 @@ export default async function AdminContent() {
               def={get(campaign, "ctaText")}
               placeholder="Discover the Collection"
             />
-            <Text name="ctaUrl" label="CTA URL" def={get(campaign, "ctaUrl")} placeholder="/shop" />
+            <LinkField
+              name="ctaUrl"
+              label="CTA link"
+              def={get(campaign, "ctaUrl")}
+              options={linkOptions}
+            />
           </div>
           <Save />
         </form>
@@ -295,7 +359,12 @@ export default async function AdminContent() {
                     rec="800×800px"
                   />
                   <Text name={`tile${i}_label`} label="Label" def={get(t, "label")} />
-                  <Text name={`tile${i}_url`} label="Link URL" def={get(t, "url")} />
+                  <LinkField
+                    name={`tile${i}_url`}
+                    label="Link"
+                    def={get(t, "url")}
+                    options={linkOptions}
+                  />
                   <label className="block">
                     <span className="font-mono text-caption tracking-wide text-ink/60 uppercase">
                       Row
