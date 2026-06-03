@@ -1,5 +1,5 @@
 import { unstable_cache } from "next/cache";
-import { createServiceClient } from "@/lib/supabase/service";
+import { createPublicClient } from "@/lib/supabase/public";
 
 // Dynamic navigation tree, built from the published collection taxonomy
 // (3 levels: gender root → category column → subcategory link). Replaces the
@@ -24,14 +24,21 @@ const ROOT_ORDER: Record<string, number> = { men: 0, women: 1, accessories: 2 };
 
 export const getNavTree = unstable_cache(
   async (): Promise<NavRoot[]> => {
-    const sb = createServiceClient();
-    const { data } = await sb
-      .from("collections")
-      .select("slug, title, parent_slug, hero_image_url, sort_order")
-      .eq("status", "published")
-      .order("sort_order", { ascending: true })
-      .order("title", { ascending: true });
-    const cols = (data as unknown as Row[]) ?? [];
+    let cols: Row[] = [];
+    // Anon (public-read) client — safe at build time and inside unstable_cache,
+    // unlike the service client (whose key is absent during `next build`).
+    try {
+      const sb = createPublicClient();
+      const { data } = await sb
+        .from("collections")
+        .select("slug, title, parent_slug, hero_image_url, sort_order")
+        .eq("status", "published")
+        .order("sort_order", { ascending: true })
+        .order("title", { ascending: true });
+      cols = (data as unknown as Row[]) ?? [];
+    } catch {
+      return [];
+    }
     const childrenOf = (slug: string | null) => cols.filter((c) => c.parent_slug === slug);
 
     const roots = cols
