@@ -30,6 +30,21 @@ export default async function BlogEdit({ params }: { params: Promise<{ id: strin
   const p = data as unknown as Post | null;
   if (!p) notFound();
 
+  // Collection link options for the "Related link" field.
+  const { data: cols } = await sb
+    .from("collections")
+    .select("slug, title, parent_slug")
+    .eq("status", "published")
+    .order("title");
+  const collections =
+    (cols as unknown as { slug: string; title: string; parent_slug: string | null }[]) ?? [];
+  const titleBySlug = Object.fromEntries(collections.map((c) => [c.slug, c.title]));
+  const linkOptions = collections.map((c) => ({
+    value: `/collections/${c.slug}`,
+    label: c.parent_slug ? `${titleBySlug[c.parent_slug] ?? c.parent_slug} › ${c.title}` : c.title,
+  }));
+  const known = new Set(["", "/shop", ...linkOptions.map((o) => o.value)]);
+
   return (
     <div className="max-w-3xl">
       <Link
@@ -85,6 +100,25 @@ export default async function BlogEdit({ params }: { params: Promise<{ id: strin
         <label className="block">
           <span className={labelCls}>Excerpt</span>
           <textarea name="excerpt" defaultValue={p.excerpt ?? ""} rows={2} className={input} />
+        </label>
+
+        <label className="block">
+          <span className={labelCls}>Related link / collection</span>
+          <select name="source_url" defaultValue={p.source_url ?? ""} className={input}>
+            <option value="">— None —</option>
+            <option value="/shop">All products (/shop)</option>
+            {p.source_url && !known.has(p.source_url) && (
+              <option value={p.source_url}>{p.source_url} (current)</option>
+            )}
+            {linkOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block font-body text-[11px] text-ink/40">
+            Shown as a “Shop the collection” button on the post when it points to a collection.
+          </span>
         </label>
 
         <div className="grid gap-4 sm:grid-cols-2">

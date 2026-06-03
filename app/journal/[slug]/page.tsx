@@ -17,6 +17,7 @@ type Post = {
   seo_title: string | null;
   seo_description: string | null;
   cover_image_url: string | null;
+  source_url: string | null;
   published_at: string | null;
 };
 
@@ -25,7 +26,9 @@ async function getPost(slug: string): Promise<Post | null> {
     const sb = await createClient();
     const { data } = await sb
       .from("blog_posts")
-      .select("id, title, slug, body, seo_title, seo_description, cover_image_url, published_at")
+      .select(
+        "id, title, slug, body, seo_title, seo_description, cover_image_url, source_url, published_at",
+      )
       .eq("slug", slug)
       .eq("status", "published")
       .maybeSingle();
@@ -88,6 +91,14 @@ export default async function Post({ params }: { params: Promise<{ slug: string 
         <div className="mt-8 font-body text-body leading-relaxed text-ink/85">
           {renderMarkdown(p.body ?? "")}
         </div>
+        {p.source_url && p.source_url.startsWith("/") && (
+          <a
+            href={p.source_url}
+            className="mt-8 inline-flex items-center rounded-sm bg-terracotta-text px-6 py-3 font-body text-[14px] font-medium text-hull-white no-underline transition-opacity hover:opacity-90"
+          >
+            Shop the collection →
+          </a>
+        )}
       </article>
     </Container>
   );

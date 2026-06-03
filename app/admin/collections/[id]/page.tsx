@@ -1,9 +1,19 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { ImageSlot } from "../../content/ImageSlot";
 import { saveCollection, assignProduct, unassignProduct } from "../actions";
+
+type ProdImg = { url: string; is_primary: boolean; sort_order: number };
+type Prod = { id: string; title: string; slug: string; product_images: ProdImg[] };
+function thumb(images: ProdImg[]): string | null {
+  const sorted = [...(images ?? [])].sort(
+    (a, b) => Number(b.is_primary) - Number(a.is_primary) || a.sort_order - b.sort_order,
+  );
+  return sorted[0]?.url ?? null;
+}
 
 type Collection = {
   id: string;
@@ -36,25 +46,29 @@ export default async function CollectionEdit({
   // Assigned products.
   const { data: assignedRows } = await sb
     .from("collection_products")
-    .select("product_id, sort_order, products(id, title, slug, gender, category_slug)")
+    .select(
+      "product_id, sort_order, products(id, title, slug, product_images(url, is_primary, sort_order))",
+    )
     .eq("collection_id", id)
     .order("sort_order");
   const assigned = (
     (assignedRows ?? []) as unknown as {
-      products: { id: string; title: string; slug: string } | null;
+      products: Prod | null;
     }[]
   )
     .map((r) => r.products)
-    .filter((p): p is { id: string; title: string; slug: string } => !!p);
+    .filter((p): p is Prod => !!p);
   const assignedIds = new Set(assigned.map((p) => p.id));
 
   // Searchable product list (right side).
-  let search = sb.from("products").select("id, title, slug").order("title").limit(40);
+  let search = sb
+    .from("products")
+    .select("id, title, slug, product_images(url, is_primary, sort_order)")
+    .order("title")
+    .limit(40);
   if (q) search = search.ilike("title", `%${q}%`);
   const { data: foundRows } = await search;
-  const found = (
-    (foundRows ?? []) as unknown as { id: string; title: string; slug: string }[]
-  ).filter((p) => !assignedIds.has(p.id));
+  const found = ((foundRows ?? []) as unknown as Prod[]).filter((p) => !assignedIds.has(p.id));
 
   // Parent options.
   const { data: parents } = await sb
@@ -153,7 +167,20 @@ export default async function CollectionEdit({
                 key={p.id}
                 className="flex items-center justify-between rounded-sm border border-ink/10 px-3 py-2"
               >
-                <span className="font-body text-body text-ink">{p.title}</span>
+                <span className="flex items-center gap-3">
+                  <span className="relative h-10 w-10 shrink-0 overflow-hidden rounded-sm bg-driftwood">
+                    {thumb(p.product_images) && (
+                      <Image
+                        src={thumb(p.product_images)!}
+                        alt=""
+                        fill
+                        unoptimized
+                        className="object-cover"
+                      />
+                    )}
+                  </span>
+                  <span className="font-body text-body text-ink">{p.title}</span>
+                </span>
                 <form action={unassignProduct}>
                   <input type="hidden" name="collection_id" value={c.id} />
                   <input type="hidden" name="product_id" value={p.id} />
@@ -186,7 +213,20 @@ export default async function CollectionEdit({
                 key={p.id}
                 className="flex items-center justify-between rounded-sm border border-ink/10 px-3 py-2"
               >
-                <span className="font-body text-body text-ink">{p.title}</span>
+                <span className="flex items-center gap-3">
+                  <span className="relative h-10 w-10 shrink-0 overflow-hidden rounded-sm bg-driftwood">
+                    {thumb(p.product_images) && (
+                      <Image
+                        src={thumb(p.product_images)!}
+                        alt=""
+                        fill
+                        unoptimized
+                        className="object-cover"
+                      />
+                    )}
+                  </span>
+                  <span className="font-body text-body text-ink">{p.title}</span>
+                </span>
                 <form action={assignProduct}>
                   <input type="hidden" name="collection_id" value={c.id} />
                   <input type="hidden" name="product_id" value={p.id} />
