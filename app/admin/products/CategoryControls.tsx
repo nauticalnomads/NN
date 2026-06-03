@@ -1,11 +1,15 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { setProductCategory } from "./actions";
 
 type Opt = { value: string; label: string };
 
 // Per-row category picker — auto-submits the server action on change.
+// Controlled (not defaultValue): React 19 resets a <form action> after submit,
+// which would snap an uncontrolled <select> back to the old category. Tracking
+// the value in state — and syncing to `current` once the server revalidates —
+// keeps the chosen category shown.
 export function CategorySelect({
   productId,
   current,
@@ -16,13 +20,20 @@ export function CategorySelect({
   options: Opt[];
 }) {
   const ref = useRef<HTMLFormElement>(null);
+  const [value, setValue] = useState(current ?? "");
+  useEffect(() => {
+    setValue(current ?? "");
+  }, [current]);
   return (
     <form ref={ref} action={setProductCategory}>
       <input type="hidden" name="product_id" value={productId} />
       <select
         name="category_slug"
-        defaultValue={current ?? ""}
-        onChange={() => ref.current?.requestSubmit()}
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          ref.current?.requestSubmit();
+        }}
         className="max-w-[16rem] rounded-sm border border-ink/20 bg-surface px-2 py-1 font-body text-caption"
       >
         <option value="">— Uncategorized —</option>

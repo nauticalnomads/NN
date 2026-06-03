@@ -104,7 +104,9 @@ function GenderToggle({
   );
 }
 
-export function Header() {
+type MegaImage = { url?: string; alt?: string };
+
+export function Header({ megaImages = {} }: { megaImages?: Record<string, MegaImage> }) {
   const [scrolled, setScrolled] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>(null);
@@ -263,7 +265,16 @@ export function Header() {
                 <div key={col.slug}>
                   {/* 16:9 image — Driftwood placeholder until CMS image set (§7.7) */}
                   <Link href={`/collections/${col.slug}`} className="block">
-                    <div className="aspect-video w-full overflow-hidden rounded bg-driftwood" />
+                    <div className="aspect-video w-full overflow-hidden rounded bg-driftwood">
+                      {megaImages[col.imageKey]?.url && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={megaImages[col.imageKey]!.url}
+                          alt={megaImages[col.imageKey]?.alt || col.heading}
+                          className="h-full w-full object-cover"
+                        />
+                      )}
+                    </div>
                   </Link>
                   <Link
                     href={`/collections/${col.slug}`}
