@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { Metadata } from "next";
 import { Container } from "@/components/Container";
 import { createClient } from "@/lib/supabase/server";
@@ -17,13 +18,14 @@ export default async function Journal() {
     title: string;
     slug: string;
     excerpt: string | null;
+    cover_image_url: string | null;
     published_at: string | null;
   }> = [];
   try {
     const sb = await createClient();
     const { data } = await sb
       .from("blog_posts")
-      .select("id, title, slug, excerpt, published_at")
+      .select("id, title, slug, excerpt, cover_image_url, published_at")
       .eq("status", "published")
       .order("published_at", { ascending: false })
       .limit(50);
@@ -40,6 +42,17 @@ export default async function Journal() {
         {posts.map((p) => (
           <li key={p.id} className="border-t border-ink/10 pt-6">
             <Link href={`/journal/${p.slug}`} className="block no-underline">
+              {p.cover_image_url && (
+                <div className="relative mb-4 aspect-[16/9] w-full overflow-hidden rounded-sm bg-driftwood">
+                  <Image
+                    src={p.cover_image_url}
+                    alt={p.title}
+                    fill
+                    sizes="(min-width:768px) 42rem, 100vw"
+                    className="object-cover"
+                  />
+                </div>
+              )}
               <h2 className="font-display text-heading text-ink hover:text-accent-sun">
                 {p.title}
               </h2>

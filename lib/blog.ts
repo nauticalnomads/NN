@@ -106,13 +106,16 @@ function extractPage(html: string) {
     pick(
       /<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:description|description)["']/i,
     );
+  const image =
+    pick(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+    pick(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
   const text = html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  return { title, description, text: decodeEntities(text).slice(0, 8000) };
+  return { title, description, image, text: decodeEntities(text).slice(0, 8000) };
 }
 
 function decodeEntities(s: string) {
@@ -135,7 +138,7 @@ export async function draftFromUrl(url: string): Promise<{
   title?: string;
   status: "ai" | "scraped" | "fetch_failed" | "insert_failed";
 }> {
-  let page = { title: "", description: "", text: "" };
+  let page = { title: "", description: "", image: "", text: "" };
   let fetched = false;
   try {
     const r = await fetch(url, {
@@ -193,15 +196,26 @@ export async function draftFromUrl(url: string): Promise<{
     excerpt: parsed?.seo_description ?? page.description ?? "",
     seo_title: parsed?.seo_title ?? title,
     seo_description: parsed?.seo_description ?? page.description ?? "",
+    cover_image_url: page.image || null,
     status: "draft" as const,
     trigger: "manual_url" as const,
     source_url: url,
   };
-  const { data, error } = await sb
+  let { data, error } = await sb
     .from("blog_posts")
     .insert(draft as never)
     .select("id")
     .single();
+  // Tolerate the cover_image_url column not existing yet (migration pending).
+  if (error && /cover_image_url/.test(error.message || "")) {
+    const rest = { ...(draft as Record<string, unknown>) };
+    delete rest.cover_image_url;
+    ({ data, error } = await sb
+      .from("blog_posts")
+      .insert(rest as never)
+      .select("id")
+      .single());
+  }
   if (error) return { ok: false, status: "insert_failed" };
 
   const id = (data as unknown as { id: string } | null)?.id;
