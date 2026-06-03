@@ -8,8 +8,7 @@ import { allowIndexing, site } from "@/lib/site";
 import { CartProvider } from "@/components/cart/CartProvider";
 import { WishlistProvider } from "@/components/wishlist/WishlistProvider";
 import { getCustomer } from "@/lib/customer";
-import { getCmsValues } from "@/lib/cms";
-import { NAV } from "@/lib/navigation";
+import { getNavTree } from "@/lib/nav-data";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -40,20 +39,15 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const customer = await getCustomer();
-  // Mega-menu column images (CMS, §7.7) — fetched here so the client Header can
-  // render them without a server import.
-  const megaKeys = NAV.flatMap((n) => n.columns.map((c) => c.imageKey));
-  const megaVals = await getCmsValues(megaKeys);
-  const megaImages = Object.fromEntries(
-    megaKeys.map((k) => [k, (megaVals[k] ?? {}) as { url?: string; alt?: string }]),
-  );
+  // Dynamic nav/mega-menu tree from the published collection taxonomy.
+  const nav = await getNavTree();
   return (
     <html lang="en" data-theme="horizon" className={fontVariables}>
       <body className="flex min-h-dvh flex-col bg-surface text-ink">
         <JsonLd data={organizationLd()} />
         <CartProvider>
           <WishlistProvider signedIn={!!customer}>
-            <Header megaImages={megaImages} />
+            <Header nav={nav} />
             <main className="flex-1">{children}</main>
             <Footer />
           </WishlistProvider>

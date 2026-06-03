@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { uploadImage } from "@/lib/storage";
@@ -41,6 +41,7 @@ export async function saveCollection(formData: FormData): Promise<void> {
   }
   revalidatePath("/admin/collections");
   revalidatePath("/");
+  revalidateTag("nav"); // header/mega-menu tree
 }
 
 export async function setCollectionStatus(formData: FormData): Promise<void> {
@@ -55,6 +56,7 @@ export async function setCollectionStatus(formData: FormData): Promise<void> {
     .eq("id", id);
   revalidatePath("/admin/collections");
   revalidatePath("/");
+  revalidateTag("nav"); // header/mega-menu tree
 }
 
 export async function assignProduct(formData: FormData): Promise<void> {
