@@ -33,6 +33,18 @@ export async function POST(request: NextRequest) {
       created_at: string;
     }>) || [];
 
+  // Load the suppression list once (marketing unsubscribes). Defensive: if the
+  // table isn't migrated yet, treat everyone as subscribed.
+  const suppressed = new Set<string>();
+  try {
+    const { data: sup } = await sb.from("email_suppressions").select("email");
+    for (const s of (sup as unknown as Array<{ email: string }>) ?? []) {
+      suppressed.add(s.email.toLowerCase());
+    }
+  } catch {
+    /* table not present yet */
+  }
+
   let sent = 0;
   for (const o of rows) {
     if (
@@ -40,6 +52,7 @@ export async function POST(request: NextRequest) {
       (o.shipping_quote as { abandoned_email_at?: string }).abandoned_email_at
     )
       continue;
+    if (suppressed.has((o.email || "").toLowerCase())) continue; // respect unsubscribe
     const { data: itemsData } = await sb
       .from("order_items")
       .select("title, unit_price, currency")

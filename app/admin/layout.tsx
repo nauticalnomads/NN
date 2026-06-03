@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getAdminUser } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import type { UserRole } from "@/lib/database.types";
 import { redirect } from "next/navigation";
 
@@ -11,11 +12,17 @@ export const metadata: Metadata = {
 
 const NAV: { href: string; label: string; allowed: UserRole[] }[] = [
   { href: "/admin", label: "Dashboard", allowed: ["master", "regular", "content"] },
+  {
+    href: "/admin/content",
+    label: "Homepage & Content",
+    allowed: ["master", "regular", "content"],
+  },
   { href: "/admin/products", label: "Products", allowed: ["master", "regular", "content"] },
   { href: "/admin/collections", label: "Collections", allowed: ["master", "regular", "content"] },
   { href: "/admin/orders", label: "Orders", allowed: ["master", "regular"] },
   { href: "/admin/refunds", label: "Refunds", allowed: ["master", "regular"] },
   { href: "/admin/financial", label: "Financial", allowed: ["master", "regular"] },
+  { href: "/admin/notifications", label: "Notifications", allowed: ["master", "regular"] },
   { href: "/admin/social", label: "Social", allowed: ["master", "regular", "content"] },
   { href: "/admin/blog", label: "Blog", allowed: ["master", "regular", "content"] },
   { href: "/admin/settings", label: "Settings", allowed: ["master", "regular"] },
@@ -27,6 +34,21 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!user) redirect("/login?next=/admin");
 
   const items = NAV.filter((i) => i.allowed.includes(user.role));
+
+  // Unread notification count for the nav badge (ops only; RLS limits reads).
+  let unread = 0;
+  if (user.role === "master" || user.role === "regular") {
+    try {
+      const sb = await createClient();
+      const { count } = await sb
+        .from("notifications")
+        .select("id", { head: true, count: "exact" })
+        .is("read_at", null);
+      unread = count ?? 0;
+    } catch {
+      unread = 0;
+    }
+  }
 
   return (
     <div className="grid min-h-dvh grid-cols-1 lg:grid-cols-[14rem_1fr]">
@@ -43,9 +65,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Link
                 key={item.href}
                 href={item.href}
-                className="block font-body text-body text-ink/80 no-underline hover:text-accent-sun"
+                className="flex items-center gap-2 font-body text-body text-ink/80 no-underline hover:text-accent-sun"
               >
                 {item.label}
+                {item.href === "/admin/notifications" && unread > 0 && (
+                  <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-accent-sun px-1.5 py-0.5 font-mono text-[10px] leading-none text-surface">
+                    {unread}
+                  </span>
+                )}
               </Link>
             ))}
           </nav>

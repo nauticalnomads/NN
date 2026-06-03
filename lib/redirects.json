@@ -1,0 +1,92 @@
+[
+  {
+    "source": "/pages/about",
+    "destination": "/about",
+    "permanent": true
+  },
+  {
+    "source": "/pages/about-us",
+    "destination": "/about",
+    "permanent": true
+  },
+  {
+    "source": "/pages/contact",
+    "destination": "/contact",
+    "permanent": true
+  },
+  {
+    "source": "/pages/contact-us",
+    "destination": "/contact",
+    "permanent": true
+  },
+  {
+    "source": "/pages/faq",
+    "destination": "/shipping-returns",
+    "permanent": true
+  },
+  {
+    "source": "/pages/returns",
+    "destination": "/shipping-returns",
+    "permanent": true
+  },
+  {
+    "source": "/pages/shipping",
+    "destination": "/shipping-returns",
+    "permanent": true
+  },
+  {
+    "source": "/pages/shipping-returns",
+    "destination": "/shipping-returns",
+    "permanent": true
+  },
+  {
+    "source": "/pages/size-guide",
+    "destination": "/size-guide",
+    "permanent": true
+  },
+  {
+    "source": "/products/gold-metal-watchs",
+    "destination": "/shop",
+    "permanent": true
+  },
+  {
+    "source": "/products/leatherbound-drift-watch-black-strap",
+    "destination": "/shop",
+    "permanent": true
+  },
+  {
+    "source": "/products/leatherbound-drift-watch-brown-strap",
+    "destination": "/shop",
+    "permanent": true
+  },
+  {
+    "source": "/products/leatherbound-drift-watch-white-strap",
+    "destination": "/shop",
+    "permanent": true
+  },
+  {
+    "source": "/products/olive-drift-wood-watch-black-strap",
+    "destination": "/shop",
+    "permanent": true
+  },
+  {
+    "source": "/products/olive-drift-wood-watch-brown-strap",
+    "destination": "/shop",
+    "permanent": true
+  },
+  {
+    "source": "/products/olive-drift-wood-watch-white-strap",
+    "destination": "/shop",
+    "permanent": true
+  },
+  {
+    "source": "/products/rose-metal-watch",
+    "destination": "/shop",
+    "permanent": true
+  },
+  {
+    "source": "/products/silver-metal-watch",
+    "destination": "/shop",
+    "permanent": true
+  }
+]

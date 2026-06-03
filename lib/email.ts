@@ -177,7 +177,7 @@ export async function sendAbandonedCart(
   const body = `<p>You left something in your bag. We saved it for now.</p>
   <ul style="padding-left:18px;margin-top:8px">${list}</ul>
   <p style="margin-top:20px"><a href="${absoluteUrl("/cart")}" style="color:#C75D3E">Come back to your bag →</a></p>
-  <p style="font-size:12px;color:rgba(42,40,38,0.5);margin-top:30px">Don't want these reminders? <a href="${absoluteUrl("/cart/unsubscribe")}" style="color:rgba(42,40,38,0.5)">Unsubscribe</a>.</p>`;
+  <p style="font-size:12px;color:rgba(42,40,38,0.5);margin-top:30px">Don't want these reminders? <a href="${absoluteUrl(`/cart/unsubscribe?email=${encodeURIComponent(email)}`)}" style="color:rgba(42,40,38,0.5)">Unsubscribe</a>.</p>`;
   return send(email, "Still thinking it over?", shell("Want me to hold it for you?", body));
 }
 
@@ -193,4 +193,17 @@ export async function sendOwnerAlert(subject: string, body: string) {
       `<pre style="font-family:ui-monospace,monospace;font-size:13px;white-space:pre-wrap">${body}</pre>`,
     ),
   );
+}
+
+// ── NEWSLETTER WELCOME / 10% OFF (redesign v2 §3.5) ──────────────────────────
+export async function sendNewsletterWelcome(email: string, code: string) {
+  const body = `
+    <p>Welcome aboard — you're on the list for new arrivals, stories, and the odd quiet offer.</p>
+    <p>Here's <strong>10% off</strong> your first order:</p>
+    <p style="margin:20px 0">
+      <span style="display:inline-block;border:1px dashed #C75D3E;color:#C75D3E;font-family:ui-monospace,monospace;font-size:20px;letter-spacing:2px;padding:12px 20px">${code}</span>
+    </p>
+    <p>Use it at checkout. One use per customer.</p>
+    <p style="margin-top:24px"><a href="${absoluteUrl("/shop")}" style="color:#C75D3E">Start exploring →</a></p>`;
+  return send(email, "Welcome to Nautical Nomads — 10% off", shell("Welcome aboard.", body));
 }

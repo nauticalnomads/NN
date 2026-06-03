@@ -1,13 +1,12 @@
-// Placeholder for the hand-painted "N" monogram (brand bible §9.2: artwork,
-// never typeset, never recolored/stretched). Real artwork drops in here later;
-// for now a neutral mark that respects clear space and min size (24px digital).
+// Brand logo — the original "NAUTICAL NOMADS" mark: light, wide-tracked
+// uppercase sans-serif in Deep Ink, with a larger gap between the two words.
 export function Logo({ className = "" }: { className?: string }) {
   return (
-    <span aria-label="Nautical Nomads" className={`inline-flex items-center gap-2 ${className}`}>
-      <span className="font-display text-2xl font-medium tracking-tight text-ink">N</span>
-      <span className="font-display text-sm tracking-[0.25em] text-ink uppercase">
-        Nautical Nomads
-      </span>
+    <span
+      aria-label="Nautical Nomads"
+      className={`inline-flex items-center font-body text-[15px] font-light tracking-[0.32em] text-ink uppercase sm:text-base ${className}`}
+    >
+      Nautical&nbsp;&nbsp;&nbsp;Nomads
     </span>
   );
 }
