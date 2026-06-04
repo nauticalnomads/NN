@@ -7,7 +7,13 @@ import { SubmitButton } from "@/components/admin/SubmitButton";
 export default async function PrintfulImport({
   searchParams,
 }: {
-  searchParams: Promise<{ created?: string; skipped?: string; variants?: string; error?: string }>;
+  searchParams: Promise<{
+    created?: string;
+    skipped?: string;
+    variants?: string;
+    remaining?: string;
+    error?: string;
+  }>;
 }) {
   await requireStaff();
   const sp = await searchParams;
@@ -87,6 +93,11 @@ export default async function PrintfulImport({
         <div className="mt-6 rounded-sm border border-accent-sea/30 bg-accent-sea/5 px-4 py-3 font-body text-caption text-ink">
           Imported <strong>{sp.created}</strong> product(s) with <strong>{sp.variants ?? 0}</strong>{" "}
           variant(s); skipped {sp.skipped ?? 0} already-mapped.{" "}
+          {Number(sp.remaining) > 0 && (
+            <strong>
+              {sp.remaining} new product(s) remaining — click Import again to continue.{" "}
+            </strong>
+          )}
           <Link href="/admin/products?category=__none__" className="text-accent-sun underline">
             Review &amp; categorise →
           </Link>

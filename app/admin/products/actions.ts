@@ -33,29 +33,38 @@ export async function importFromPrintful(formData: FormData): Promise<void> {
   const single = String(formData.get("sync_id") || "").trim();
   const sb = createServiceClient();
 
-  let outcome: { created: number; skipped: number; variants: number } | { error: string };
+  // Cloudflare caps subrequests per invocation, so import new products in
+  // capped batches (each new product = a Printful fetch + a few DB writes).
+  // Already-imported ids are filtered in-memory from a single query — no
+  // per-product lookup. Re-run to continue (idempotent: skips existing).
+  const MAX_PER_RUN = 8;
+
+  let outcome:
+    | { created: number; skipped: number; variants: number; remaining: number }
+    | { error: string };
   try {
     const storeId = (await resolveStoreId()) ?? undefined;
-    const ids = single ? [single] : (await listSyncProducts(storeId)).map((p) => String(p.id));
+    const allIds = single ? [single] : (await listSyncProducts(storeId)).map((p) => String(p.id));
+    const { data: existRows } = await sb
+      .from("products")
+      .select("provider_product_id")
+      .eq("provider", "printful");
+    const have = new Set(
+      ((existRows as unknown as { provider_product_id: string | null }[]) ?? []).map((r) =>
+        String(r.provider_product_id),
+      ),
+    );
+    const newIds = allIds.filter((id) => !have.has(id));
+    const batch = newIds.slice(0, MAX_PER_RUN);
     let created = 0,
-      skipped = 0,
-      variants = 0;
-    for (const id of ids) {
-      const { data: ex } = await sb
-        .from("products")
-        .select("id")
-        .eq("provider", "printful")
-        .eq("provider_product_id", id)
-        .maybeSingle();
-      if (ex) {
-        skipped++;
-        continue;
-      }
+      variants = 0,
+      failed = 0;
+    for (const id of batch) {
       const detail = await getSyncProduct(id, storeId);
       const sp = detail.sync_product;
       const svs = detail.sync_variants ?? [];
       if (!sp || svs.length === 0) {
-        skipped++;
+        failed++;
         continue;
       }
       const prices = svs
@@ -84,7 +93,7 @@ export async function importFromPrintful(formData: FormData): Promise<void> {
         .select("id")
         .single();
       if (error || !prod) {
-        skipped++;
+        failed++;
         continue;
       }
       const pid = (prod as unknown as { id: string }).id;
@@ -115,7 +124,12 @@ export async function importFromPrintful(formData: FormData): Promise<void> {
       }
       created++;
     }
-    outcome = { created, skipped, variants };
+    outcome = {
+      created,
+      skipped: allIds.length - newIds.length + failed,
+      variants,
+      remaining: newIds.length - batch.length,
+    };
   } catch (e) {
     outcome = { error: e instanceof Error ? e.message : String(e) };
   }
@@ -125,7 +139,7 @@ export async function importFromPrintful(formData: FormData): Promise<void> {
     redirect(`/admin/products/import?error=${encodeURIComponent(outcome.error.slice(0, 140))}`);
   }
   redirect(
-    `/admin/products/import?created=${outcome.created}&skipped=${outcome.skipped}&variants=${outcome.variants}`,
+    `/admin/products/import?created=${outcome.created}&skipped=${outcome.skipped}&variants=${outcome.variants}&remaining=${outcome.remaining}`,
   );
 }
 
