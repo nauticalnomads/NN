@@ -69,7 +69,15 @@ export default async function AdminProducts({
 
   return (
     <div>
-      <h1 className="font-display text-display-2 tracking-tight text-ink">Products</h1>
+      <div className="flex items-baseline justify-between gap-3">
+        <h1 className="font-display text-display-2 tracking-tight text-ink">Products</h1>
+        <Link
+          href="/admin/products/import"
+          className="rounded-sm bg-accent-sun px-4 py-2 font-mono text-xs tracking-widest text-surface uppercase no-underline"
+        >
+          Import from Printful →
+        </Link>
+      </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <p className="font-body text-body text-ink/60">
           {rows.length} product{rows.length === 1 ? "" : "s"}
