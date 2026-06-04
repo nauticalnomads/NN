@@ -66,6 +66,8 @@ export default async function AdminProducts({
   else if (category) query = query.eq("category_slug", category);
   const { data } = await query;
   const rows = (data as unknown as Row[]) || [];
+  const drafts = rows.filter((p) => p.status !== "published");
+  const published = rows.filter((p) => p.status === "published");
 
   return (
     <div>
@@ -86,74 +88,102 @@ export default async function AdminProducts({
         <CategoryFilter current={category} options={catOptions} />
       </div>
 
-      <div className="mt-6 overflow-x-auto rounded-sm border border-ink/10">
-        <table className="w-full text-left">
-          <thead className="bg-surface-2">
-            <tr className="font-mono text-caption tracking-wide text-ink/60 uppercase">
-              <th className="px-4 py-3">Product</th>
-              <th className="px-4 py-3">Category</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Price</th>
-              <th className="px-4 py-3 text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((p) => {
-              const src = thumb(p.product_images);
-              return (
-                <tr key={p.id} className="border-t border-ink/10 font-body text-body text-ink">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-sm bg-driftwood">
-                        {src && (
-                          <Image src={src} alt="" fill unoptimized className="object-cover" />
-                        )}
-                      </div>
-                      <Link
-                        href={`/admin/products/${p.id}`}
-                        className="text-ink no-underline hover:text-accent-sun"
-                      >
-                        {p.title}
-                      </Link>
+      {drafts.length > 0 && (
+        <section className="mt-8">
+          <h2 className="mb-2 font-mono text-caption tracking-wide text-accent-sun uppercase">
+            Drafts — review &amp; publish ({drafts.length})
+          </h2>
+          <ProductTable rows={drafts} catOptions={catOptions} />
+        </section>
+      )}
+
+      <section className="mt-8">
+        <h2 className="mb-2 font-mono text-caption tracking-wide text-ink/60 uppercase">
+          Published ({published.length})
+        </h2>
+        <ProductTable
+          rows={published}
+          catOptions={catOptions}
+          emptyNote={
+            category ? "No published products in this category." : "No published products."
+          }
+        />
+      </section>
+    </div>
+  );
+}
+
+function ProductTable({
+  rows,
+  catOptions,
+  emptyNote,
+}: {
+  rows: Row[];
+  catOptions: { value: string; label: string }[];
+  emptyNote?: string;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-sm border border-ink/10">
+      <table className="w-full text-left">
+        <thead className="bg-surface-2">
+          <tr className="font-mono text-caption tracking-wide text-ink/60 uppercase">
+            <th className="px-4 py-3">Product</th>
+            <th className="px-4 py-3">Category</th>
+            <th className="px-4 py-3">Status</th>
+            <th className="px-4 py-3 text-right">Price</th>
+            <th className="px-4 py-3 text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((p) => {
+            const src = thumb(p.product_images);
+            return (
+              <tr key={p.id} className="border-t border-ink/10 font-body text-body text-ink">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-sm bg-driftwood">
+                      {src && <Image src={src} alt="" fill unoptimized className="object-cover" />}
                     </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <CategorySelect
-                      productId={p.id}
-                      current={p.category_slug}
-                      options={catOptions}
+                    <Link
+                      href={`/admin/products/${p.id}`}
+                      className="text-ink no-underline hover:text-accent-sun"
+                    >
+                      {p.title}
+                    </Link>
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <CategorySelect productId={p.id} current={p.category_slug} options={catOptions} />
+                </td>
+                <td className="px-4 py-3 font-mono text-caption uppercase">{p.status}</td>
+                <td className="px-4 py-3 text-right font-mono">
+                  {formatPrice(p.price, p.currency)}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <form action={setProductStatus}>
+                    <input type="hidden" name="product_id" value={p.id} />
+                    <input
+                      type="hidden"
+                      name="status"
+                      value={p.status === "published" ? "draft" : "published"}
                     />
-                  </td>
-                  <td className="px-4 py-3 font-mono text-caption uppercase">{p.status}</td>
-                  <td className="px-4 py-3 text-right font-mono">
-                    {formatPrice(p.price, p.currency)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <form action={setProductStatus}>
-                      <input type="hidden" name="product_id" value={p.id} />
-                      <input
-                        type="hidden"
-                        name="status"
-                        value={p.status === "published" ? "draft" : "published"}
-                      />
-                      <button className="rounded-sm border border-ink/20 px-3 py-1 font-mono text-xs tracking-widest text-ink/70 uppercase hover:border-accent-sun hover:text-accent-sun">
-                        {p.status === "published" ? "Unpublish" : "Publish"}
-                      </button>
-                    </form>
-                  </td>
-                </tr>
-              );
-            })}
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center font-body text-ink/50">
-                  No products{category ? " in this category" : " — run the migration"}.
+                    <button className="rounded-sm border border-ink/20 px-3 py-1 font-mono text-xs tracking-widest text-ink/70 uppercase hover:border-accent-sun hover:text-accent-sun">
+                      {p.status === "published" ? "Unpublish" : "Publish"}
+                    </button>
+                  </form>
                 </td>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            );
+          })}
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={5} className="px-4 py-8 text-center font-body text-ink/50">
+                {emptyNote ?? "None."}
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
