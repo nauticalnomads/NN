@@ -74,43 +74,11 @@ function WishlistIcon() {
   );
 }
 
-function GenderToggle({
-  gender,
-  onChange,
-  size = "sm",
-}: {
-  gender: string;
-  onChange: (g: string) => void;
-  size?: "sm" | "lg";
-}) {
-  const base = size === "lg" ? "text-[15px] py-2" : "text-[13px]";
-  return (
-    <div className={`flex items-center gap-5 ${size === "lg" ? "px-1" : ""}`}>
-      {["women", "men"].map((g) => (
-        <button
-          key={g}
-          type="button"
-          onClick={() => onChange(g)}
-          className={`relative font-body font-medium tracking-[0.02em] capitalize transition-colors ${base} ${
-            gender === g ? "text-deep-ink" : "text-driftwood-tan hover:text-deep-ink"
-          }`}
-        >
-          {g}
-          {gender === g && (
-            <span className="absolute -bottom-1 left-0 h-[2px] w-full bg-terracotta" />
-          )}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export function Header({ nav = [] }: { nav?: NavRoot[] }) {
   const [scrolled, setScrolled] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [activeMega, setActiveMega] = useState<string | null>(null);
-  const [gender, setGender] = useState<string>("women");
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -128,17 +96,6 @@ export function Header({ nav = [] }: { nav?: NavRoot[] }) {
     };
   }, [drawerOpen]);
 
-  // Read gender preference cookie on mount.
-  useEffect(() => {
-    const m = document.cookie.match(/(?:^|;\s*)nn_gender_pref=(women|men)/);
-    if (m) setGender(m[1]);
-  }, []);
-
-  const setGenderPref = (g: string) => {
-    setGender(g);
-    document.cookie = `nn_gender_pref=${g}; path=/; max-age=31536000; samesite=lax`;
-  };
-
   // Mega-menu hover with open (200ms) + close (150ms grace) delays.
   const enterNav = (slug: string) => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -154,10 +111,9 @@ export function Header({ nav = [] }: { nav?: NavRoot[] }) {
 
   return (
     <header className="sticky top-0 z-50">
-      {/* Gender toggle bar — desktop only (§2.1) */}
+      {/* Utility bar — desktop only (§2.1) */}
       <div className="hidden border-b border-driftwood/60 bg-hull-white md:block">
-        <div className="mx-auto flex max-w-[1400px] items-center justify-between px-6 py-2">
-          <GenderToggle gender={gender} onChange={setGenderPref} />
+        <div className="mx-auto flex max-w-[1400px] items-center justify-end px-6 py-2">
           <div className="flex items-center gap-5">
             {UTILITY_LINKS.map((l) => (
               <Link
@@ -332,10 +288,6 @@ export function Header({ nav = [] }: { nav?: NavRoot[] }) {
                   <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
                 </svg>
               </button>
-            </div>
-
-            <div className="border-b border-driftwood px-5 py-3">
-              <GenderToggle gender={gender} onChange={setGenderPref} size="lg" />
             </div>
 
             <nav className="flex-1 overflow-y-auto px-2 py-2">
