@@ -1,10 +1,127 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { autoQueueForProduct } from "@/lib/blog";
 import { generateSeo } from "@/lib/seo";
+import { printfulConfigured, listSyncProducts, getSyncProduct } from "@/lib/printful";
+
+function slugify(s: string): string {
+  return (
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "")
+      .slice(0, 70) || "product"
+  );
+}
+
+// Import sync products from Printful into the catalogue. Idempotent &
+// non-destructive: only creates products not already mapped (by
+// provider_product_id); imported products land as drafts for review. Pass a
+// single sync product id, or leave blank to import all new ones.
+export async function importFromPrintful(formData: FormData): Promise<void> {
+  await requireStaff();
+  if (!printfulConfigured()) redirect("/admin/products/import?error=nokey");
+  const single = String(formData.get("sync_id") || "").trim();
+  const sb = createServiceClient();
+
+  let outcome: { created: number; skipped: number; variants: number } | { error: string };
+  try {
+    const ids = single ? [single] : (await listSyncProducts()).map((p) => String(p.id));
+    let created = 0,
+      skipped = 0,
+      variants = 0;
+    for (const id of ids) {
+      const { data: ex } = await sb
+        .from("products")
+        .select("id")
+        .eq("provider", "printful")
+        .eq("provider_product_id", id)
+        .maybeSingle();
+      if (ex) {
+        skipped++;
+        continue;
+      }
+      const detail = await getSyncProduct(id);
+      const sp = detail.sync_product;
+      const svs = detail.sync_variants ?? [];
+      if (!sp || svs.length === 0) {
+        skipped++;
+        continue;
+      }
+      const prices = svs
+        .map((v) => Number(v.retail_price))
+        .filter((n) => Number.isFinite(n) && n > 0);
+      const price = prices.length ? Math.min(...prices) : 0;
+      const currency = svs[0].currency || "GBP";
+      const image =
+        sp.thumbnail_url ||
+        svs.find((v) => v.product?.image)?.product?.image ||
+        svs.flatMap((v) => v.files ?? []).find((f) => f.preview_url)?.preview_url ||
+        null;
+      const { data: prod, error } = await sb
+        .from("products")
+        .insert({
+          title: sp.name,
+          slug: `${slugify(sp.name)}-${String(sp.id).slice(-5)}`,
+          status: "draft",
+          price,
+          currency,
+          provider: "printful",
+          provider_product_id: String(sp.id),
+          source: "printful",
+          source_id: String(sp.id),
+        } as never)
+        .select("id")
+        .single();
+      if (error || !prod) {
+        skipped++;
+        continue;
+      }
+      const pid = (prod as unknown as { id: string }).id;
+      const vrows = svs.map((v, i) => ({
+        product_id: pid,
+        title:
+          (v.name || "")
+            .replace(sp.name, "")
+            .replace(/^[\s\-/|]+/, "")
+            .trim() ||
+          v.name ||
+          `Variant ${i + 1}`,
+        sku: v.sku || null,
+        provider_variant_id: String(v.id),
+        price: Number(v.retail_price) || price,
+        sort_order: i,
+      }));
+      await sb.from("variants").insert(vrows as never);
+      variants += vrows.length;
+      if (image) {
+        await sb.from("product_images").insert({
+          product_id: pid,
+          url: image,
+          alt: sp.name,
+          sort_order: 0,
+          is_primary: true,
+        } as never);
+      }
+      created++;
+    }
+    outcome = { created, skipped, variants };
+  } catch (e) {
+    outcome = { error: e instanceof Error ? e.message : String(e) };
+  }
+
+  revalidatePath("/admin/products");
+  if ("error" in outcome) {
+    redirect(`/admin/products/import?error=${encodeURIComponent(outcome.error.slice(0, 140))}`);
+  }
+  redirect(
+    `/admin/products/import?created=${outcome.created}&skipped=${outcome.skipped}&variants=${outcome.variants}`,
+  );
+}
 
 // AI-fill SEO title + description for a single product.
 export async function generateProductSeo(formData: FormData): Promise<void> {
