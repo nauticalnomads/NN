@@ -5,6 +5,7 @@ import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { ImageSlot } from "../../content/ImageSlot";
 import { saveCollection, assignProduct, unassignProduct, generateCollectionSeo } from "../actions";
+import { SubmitButton } from "@/components/admin/SubmitButton";
 
 type ProdImg = { url: string; is_primary: boolean; sort_order: number };
 type Prod = { id: string; title: string; slug: string; product_images: ProdImg[] };
@@ -158,15 +159,16 @@ export default async function CollectionEdit({
             />
           </Field>
           <div className="flex flex-wrap items-center gap-3">
-            <button className="rounded-sm bg-accent-sun px-6 py-3 font-mono text-xs tracking-widest text-surface uppercase">
+            <SubmitButton className="rounded-sm bg-accent-sun px-6 py-3 font-mono text-xs tracking-widest text-surface uppercase">
               Save details
-            </button>
-            <button
+            </SubmitButton>
+            <SubmitButton
               formAction={generateCollectionSeo}
+              pendingText="Generating…"
               className="rounded-sm border border-ink/25 px-4 py-3 font-mono text-xs tracking-widest text-ink/70 uppercase hover:border-accent-sun hover:text-accent-sun"
             >
               ✨ Generate SEO with AI
-            </button>
+            </SubmitButton>
           </div>
         </form>
 

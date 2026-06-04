@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { SubmitButton } from "@/components/admin/SubmitButton";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { draftFromUrlAction, publishDraft, discardDraft } from "./actions";
@@ -78,9 +79,12 @@ export default async function AdminBlog({
           placeholder="https://example.com/article"
           className="flex-1 rounded-sm border border-ink/20 bg-surface px-3 py-2 font-body text-body"
         />
-        <button className="rounded-sm bg-accent-sun px-4 py-2 font-mono text-xs tracking-widest text-surface uppercase">
+        <SubmitButton
+          pendingText="Drafting…"
+          className="rounded-sm bg-accent-sun px-4 py-2 font-mono text-xs tracking-widest text-surface uppercase"
+        >
           Draft from URL
-        </button>
+        </SubmitButton>
       </form>
 
       <h2 className="mt-10 font-mono text-caption tracking-wide text-ink/60 uppercase">

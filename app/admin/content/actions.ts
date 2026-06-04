@@ -5,10 +5,19 @@ import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { setCmsValue } from "@/lib/cms";
 import { uploadImage } from "@/lib/storage";
+import { generateAltText } from "@/lib/anthropic";
 
 // Homepage & Content CMS actions (redesign v2 §7). Content admin may manage
 // homepage content (matrix §3 puts pages/products/social under content role).
 // Images are auto-cropped client-side (ImageSlot) before upload.
+
+// Use the typed alt when provided; otherwise auto-generate one for a freshly
+// uploaded image (accessibility + SEO). Falls back to "" with no AI key.
+async function altFor(provided: string, url: string | null, uploaded: boolean): Promise<string> {
+  if (provided.trim()) return provided.trim();
+  if (uploaded && url) return (await generateAltText(url)) ?? "";
+  return provided;
+}
 
 // Generic: read current value, merge an image slot + alt, save under `key`.
 // `slot` is a dotted path within the value (e.g. "left", "columns.0").
@@ -27,9 +36,11 @@ export async function saveHero(formData: FormData): Promise<void> {
   const cur = await readValue("home.hero");
   const slotImg = async (slot: string, cmsKey: string) => {
     const f = formData.get(`${slot}_file`) as File | null;
-    const alt = String(formData.get(`${slot}_alt`) || "");
-    const url =
-      f && f.size ? await uploadImage(f, cmsKey) : ((cur[slot] as { url?: string })?.url ?? null);
+    const uploaded = !!(f && f.size);
+    const url = uploaded
+      ? await uploadImage(f!, cmsKey)
+      : ((cur[slot] as { url?: string })?.url ?? null);
+    const alt = await altFor(String(formData.get(`${slot}_alt`) || ""), url, uploaded);
     return { url: url ?? undefined, alt };
   };
   const value = {
@@ -54,10 +65,13 @@ export async function saveBanner(formData: FormData): Promise<void> {
   const columns = [];
   for (let i = 0; i < 3; i++) {
     const f = formData.get(`col${i}_file`) as File | null;
-    const url =
-      f && f.size ? await uploadImage(f, `banner-${i}`) : (cur.columns?.[i]?.image?.url ?? null);
+    const uploaded = !!(f && f.size);
+    const url = uploaded
+      ? await uploadImage(f!, `banner-${i}`)
+      : (cur.columns?.[i]?.image?.url ?? null);
+    const alt = await altFor(String(formData.get(`col${i}_alt`) || ""), url, uploaded);
     columns.push({
-      image: { url: url ?? undefined, alt: String(formData.get(`col${i}_alt`) || "") },
+      image: { url: url ?? undefined, alt },
       overlay: formData.get(`col${i}_overlay`) === "on",
       heading: String(formData.get(`col${i}_heading`) || ""),
       url: String(formData.get(`col${i}_url`) || ""),
@@ -87,8 +101,10 @@ export async function saveStrip(formData: FormData): Promise<void> {
   const images = [];
   for (let i = 0; i < 3; i++) {
     const f = formData.get(`img${i}_file`) as File | null;
-    const url = f && f.size ? await uploadImage(f, `strip-${i}`) : (cur.images?.[i]?.url ?? null);
-    images.push({ url: url ?? undefined, alt: String(formData.get(`img${i}_alt`) || "") });
+    const uploaded = !!(f && f.size);
+    const url = uploaded ? await uploadImage(f!, `strip-${i}`) : (cur.images?.[i]?.url ?? null);
+    const alt = await altFor(String(formData.get(`img${i}_alt`) || ""), url, uploaded);
+    images.push({ url: url ?? undefined, alt });
   }
   await setCmsValue("home.strip", { images });
   revalidatePath("/");
@@ -102,10 +118,13 @@ export async function saveTiles(formData: FormData): Promise<void> {
   const tiles = [];
   for (let i = 0; i < 8; i++) {
     const f = formData.get(`tile${i}_file`) as File | null;
-    const url =
-      f && f.size ? await uploadImage(f, `tile-${i}`) : (cur.tiles?.[i]?.image?.url ?? null);
+    const uploaded = !!(f && f.size);
+    const url = uploaded
+      ? await uploadImage(f!, `tile-${i}`)
+      : (cur.tiles?.[i]?.image?.url ?? null);
+    const alt = await altFor(String(formData.get(`tile${i}_alt`) || ""), url, uploaded);
     tiles.push({
-      image: { url: url ?? undefined, alt: String(formData.get(`tile${i}_alt`) || "") },
+      image: { url: url ?? undefined, alt },
       label: String(formData.get(`tile${i}_label`) || ""),
       url: String(formData.get(`tile${i}_url`) || ""),
       row: (formData.get(`tile${i}_row`) === "men" ? "men" : "women") as "men" | "women",

@@ -4,6 +4,7 @@ import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { formatPrice } from "@/lib/format";
 import { updateProduct, generateProductSeo } from "../actions";
+import { SubmitButton } from "@/components/admin/SubmitButton";
 
 type Product = {
   id: string;
@@ -114,15 +115,16 @@ export default async function ProductEditPage({ params }: { params: Promise<{ id
         </Field>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button className="rounded-sm bg-accent-sun px-6 py-3 font-mono text-xs tracking-widest text-surface uppercase">
+          <SubmitButton className="rounded-sm bg-accent-sun px-6 py-3 font-mono text-xs tracking-widest text-surface uppercase">
             Save
-          </button>
-          <button
+          </SubmitButton>
+          <SubmitButton
             formAction={generateProductSeo}
+            pendingText="Generating…"
             className="rounded-sm border border-ink/25 px-4 py-3 font-mono text-xs tracking-widest text-ink/70 uppercase hover:border-accent-sun hover:text-accent-sun"
           >
             ✨ Generate SEO with AI
-          </button>
+          </SubmitButton>
         </div>
       </form>
     </div>
