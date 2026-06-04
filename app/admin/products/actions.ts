@@ -165,9 +165,14 @@ export async function setProductCategory(formData: FormData): Promise<void> {
     cur = bySlug[cur].parent_slug;
   }
 
+  // products.gender has a CHECK constraint (men/women/unisex) — collections use
+  // "accessories", which isn't valid here, so map non-gendered categories to
+  // "unisex". Without this the whole update fails and the category never saves.
+  const productGender =
+    target.gender === "men" || target.gender === "women" ? target.gender : "unisex";
   await sb
     .from("products")
-    .update({ category_slug: categorySlug, gender: target.gender } as never)
+    .update({ category_slug: categorySlug, gender: productGender } as never)
     .eq("id", productId);
   await sb.from("collection_products").delete().eq("product_id", productId);
   await sb
