@@ -135,7 +135,8 @@ export async function bulkTag(formData: FormData): Promise<void> {
   const category = String(formData.get("category_slug") || "");
   if (!ids.length) return;
   const patch: Record<string, unknown> = {};
-  if (gender) patch.gender = gender;
+  // products.gender CHECK allows men/women/unisex — map anything else to unisex.
+  if (gender) patch.gender = gender === "men" || gender === "women" ? gender : "unisex";
   if (category) patch.category_slug = category;
   if (!Object.keys(patch).length) return;
 

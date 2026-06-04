@@ -20,21 +20,31 @@ export async function getIntegrationConfig(): Promise<IntegrationConfig> {
   } catch {
     row = {};
   }
-  const pick = (col: string, env: string): string => {
+  // Static process.env references — dynamic process.env[key] does not resolve
+  // reliably in the Cloudflare Workers runtime, so env fallback must be explicit.
+  const env: Record<string, string | undefined> = {
+    printful_api_key: process.env.PRINTFUL_API_KEY,
+    printful_store_id: process.env.PRINTFUL_STORE_ID,
+    printful_webhook_secret: process.env.PRINTFUL_WEBHOOK_SECRET,
+    printify_api_key: process.env.PRINTIFY_API_KEY,
+    printify_shop_id: process.env.PRINTIFY_SHOP_ID,
+    printify_webhook_secret: process.env.PRINTIFY_WEBHOOK_SECRET,
+  };
+  const pick = (col: string): string => {
     const v = row[col];
     if (typeof v === "string" && v.trim()) return v.trim();
-    return process.env[env] ?? "";
+    return env[col] ?? "";
   };
   return {
     printful: {
-      apiKey: pick("printful_api_key", "PRINTFUL_API_KEY"),
-      storeId: pick("printful_store_id", "PRINTFUL_STORE_ID"),
-      webhookSecret: pick("printful_webhook_secret", "PRINTFUL_WEBHOOK_SECRET"),
+      apiKey: pick("printful_api_key"),
+      storeId: pick("printful_store_id"),
+      webhookSecret: pick("printful_webhook_secret"),
     },
     printify: {
-      apiKey: pick("printify_api_key", "PRINTIFY_API_KEY"),
-      shopId: pick("printify_shop_id", "PRINTIFY_SHOP_ID"),
-      webhookSecret: pick("printify_webhook_secret", "PRINTIFY_WEBHOOK_SECRET"),
+      apiKey: pick("printify_api_key"),
+      shopId: pick("printify_shop_id"),
+      webhookSecret: pick("printify_webhook_secret"),
     },
   };
 }
