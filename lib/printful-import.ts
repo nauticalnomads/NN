@@ -90,15 +90,13 @@ export async function importPrintfulProduct(
   }));
   await sb.from("variants").insert(vrows as never);
   if (image) {
-    await sb
-      .from("product_images")
-      .insert({
-        product_id: pid,
-        url: image,
-        alt: sp.name,
-        sort_order: 0,
-        is_primary: true,
-      } as never);
+    await sb.from("product_images").insert({
+      product_id: pid,
+      url: image,
+      alt: sp.name,
+      sort_order: 0,
+      is_primary: true,
+    } as never);
   }
   return "created";
 }
