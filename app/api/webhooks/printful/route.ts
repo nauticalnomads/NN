@@ -3,12 +3,13 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { sendShippingConfirmation } from "@/lib/email";
 import { resolveStoreId } from "@/lib/printful";
 import { importPrintfulProduct } from "@/lib/printful-import";
+import { getIntegrationConfig } from "@/lib/integrations";
 
 // Printful webhook (configure in Printful → Settings → Webhooks).
 // - package_shipped → update order tracking + email the customer.
 // - product_synced  → auto-create a draft product here (publish-on-Printful → draft-on-admin).
 export async function POST(request: NextRequest) {
-  const secret = process.env.PRINTFUL_WEBHOOK_SECRET;
+  const secret = (await getIntegrationConfig()).printful.webhookSecret;
   const provided =
     request.headers.get("x-pf-webhook-token") || request.nextUrl.searchParams.get("token");
   if (secret && provided !== secret) {

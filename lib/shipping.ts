@@ -4,7 +4,7 @@
 //   - if any live call fails or times out, fall back gracefully to flat zones
 //     and log the failure (never block checkout on POD-API uptime)
 import { createServiceClient } from "@/lib/supabase/service";
-import { printfulHeaders } from "./shipping-printful"; // re-export below
+import { getIntegrationConfig, printfulAuthHeaders } from "@/lib/integrations";
 
 export type ShippingAddress = {
   name?: string;
@@ -58,11 +58,12 @@ async function flatQuote(addr: ShippingAddress): Promise<Quote> {
 // ── live providers ────────────────────────────────────────────────────────────
 async function printfulQuote(items: CartLine[], addr: ShippingAddress): Promise<number | null> {
   const variants = items.filter((i) => i.provider === "printful" && i.provider_variant_id);
-  if (!variants.length || !process.env.PRINTFUL_API_KEY) return null;
+  const { printful } = await getIntegrationConfig();
+  if (!variants.length || !printful.apiKey) return null;
   try {
     const res = await fetch("https://api.printful.com/shipping/rates", {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...printfulHeaders() },
+      headers: { "Content-Type": "application/json", ...(await printfulAuthHeaders()) },
       body: JSON.stringify({
         recipient: {
           address1: addr.line1 || "",
@@ -92,15 +93,16 @@ async function printifyQuote(items: CartLine[], addr: ShippingAddress): Promise<
   const lines = items.filter(
     (i) => i.provider === "printify" && i.provider_product_id && i.provider_variant_id,
   );
-  const shop = process.env.PRINTIFY_SHOP_ID;
-  if (!lines.length || !process.env.PRINTIFY_API_KEY || !shop) return null;
+  const { printify } = await getIntegrationConfig();
+  const shop = printify.shopId;
+  if (!lines.length || !printify.apiKey || !shop) return null;
   try {
     const [first = "", ...rest] = (addr.name ?? "").split(" ");
     const res = await fetch(`https://api.printify.com/v1/shops/${shop}/orders/shipping.json`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.PRINTIFY_API_KEY ?? ""}`,
+        Authorization: `Bearer ${printify.apiKey}`,
       },
       body: JSON.stringify({
         line_items: lines.map((l) => ({

@@ -17,7 +17,7 @@ export default async function PrintfulImport({
 }) {
   await requireStaff();
   const sp = await searchParams;
-  const configured = printfulConfigured();
+  const configured = await printfulConfigured();
 
   // Live connection check: list accessible stores (also reveals the store id).
   let conn:

@@ -1,8 +1,40 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireOps } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
+
+// Save POD provider credentials to store_settings. Write-only: only fields with
+// a new (non-empty) value are updated, so blanks keep the current secret. Needs
+// the provider columns (see the SQL shown in /admin/settings).
+export async function saveIntegrations(formData: FormData) {
+  await requireOps();
+  const sb = createServiceClient();
+  const fields = [
+    "printful_api_key",
+    "printful_store_id",
+    "printful_webhook_secret",
+    "printify_api_key",
+    "printify_shop_id",
+    "printify_webhook_secret",
+  ];
+  const patch: Record<string, string> = {};
+  for (const f of fields) {
+    const v = String(formData.get(f) || "").trim();
+    if (v) patch[f] = v;
+  }
+  if (Object.keys(patch).length === 0) {
+    redirect("/admin/settings?integrations=saved");
+  }
+  const { error } = await sb
+    .from("store_settings")
+    .update(patch as never)
+    .eq("id", true);
+  revalidatePath("/admin/settings");
+  // A missing-column error means the one-time migration hasn't been run yet.
+  redirect(`/admin/settings?integrations=${error ? "migrate" : "saved"}`);
+}
 
 type Zone = { name: string; countries: string[]; rate: number };
 
