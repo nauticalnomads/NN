@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendShippingConfirmation } from "@/lib/email";
+import { getIntegrationConfig } from "@/lib/integrations";
 
 // Printify order webhook. Configure in Printify → Settings → Webhooks.
 // Subscribe to order:shipment:created (and optionally order:shipment:delivered).
@@ -9,7 +10,7 @@ export async function POST(request: NextRequest) {
   if (!event) return NextResponse.json({ ok: true });
 
   // Validate by webhook secret (Printify includes it in the URL via token param).
-  const secret = process.env.PRINTIFY_WEBHOOK_SECRET;
+  const secret = (await getIntegrationConfig()).printify.webhookSecret;
   const provided = request.nextUrl.searchParams.get("token");
   if (secret && provided !== secret) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

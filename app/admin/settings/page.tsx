@@ -1,10 +1,25 @@
 import { requireOps } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { updateSettings } from "./actions";
+import { updateSettings, saveIntegrations } from "./actions";
 import { ZoneEditor, type Zone } from "./ZoneEditor";
+import { getIntegrationConfig } from "@/lib/integrations";
+import { absoluteUrl } from "@/lib/site";
+import { SubmitButton } from "@/components/admin/SubmitButton";
 
-export default async function AdminSettings() {
+export default async function AdminSettings({
+  searchParams,
+}: {
+  searchParams: Promise<{ integrations?: string }>;
+}) {
   await requireOps();
+  const { integrations: integStatus } = await searchParams;
+  const integ = await getIntegrationConfig();
+  const pfWebhook = absoluteUrl(
+    `/api/webhooks/printful?token=${integ.printful.webhookSecret || "YOUR_SECRET"}`,
+  );
+  const piWebhook = absoluteUrl(
+    `/api/webhooks/printify?token=${integ.printify.webhookSecret || "YOUR_SECRET"}`,
+  );
   const sb = await createClient();
   const { data: store } = await sb.from("store_settings").select("*").eq("id", true).maybeSingle();
   const { data: ship } = await sb
@@ -131,6 +146,99 @@ export default async function AdminSettings() {
         </button>
       </form>
 
+      {/* ── POD integrations ─────────────────────────────────────────────── */}
+      <section className="mt-14 border-t border-ink/10 pt-10">
+        <h2 className="font-display text-heading text-ink">POD integrations</h2>
+        <p className="mt-1 font-mono text-caption text-ink/50">
+          Printful &amp; Printify credentials. Values saved here override the Cloudflare secrets.
+          Secret fields are write-only — leave blank to keep the current value.
+        </p>
+
+        {integStatus === "saved" && (
+          <div className="mt-4 rounded-sm border border-accent-sea/30 bg-accent-sea/5 px-4 py-3 font-body text-caption text-ink">
+            Integration settings saved.
+          </div>
+        )}
+        {integStatus === "migrate" && (
+          <div className="mt-4 rounded-sm border border-accent-sun/40 bg-accent-sun/5 px-4 py-3 font-body text-caption text-ink">
+            Couldn&apos;t save — run the one-time SQL at the bottom of this section first, then try
+            again.
+          </div>
+        )}
+
+        <div className="mt-4 space-y-1 rounded-sm border border-ink/10 bg-surface-2/40 p-4 font-mono text-caption text-ink/70">
+          <div>
+            Printful — API key {integ.printful.apiKey ? "✓" : "✗"} · Store ID{" "}
+            <span className="text-ink">{integ.printful.storeId || "✗"}</span> · Webhook{" "}
+            {integ.printful.webhookSecret ? "✓" : "✗"}
+          </div>
+          <div>
+            Printify — API key {integ.printify.apiKey ? "✓" : "✗"} · Shop ID{" "}
+            <span className="text-ink">{integ.printify.shopId || "✗"}</span> · Webhook{" "}
+            {integ.printify.webhookSecret ? "✓" : "✗"}
+          </div>
+          <div className="pt-2 text-ink/50">Webhook URLs to paste into the provider dashboard:</div>
+          <div className="break-all text-ink">Printful → {pfWebhook}</div>
+          <div className="break-all text-ink">Printify → {piWebhook}</div>
+        </div>
+
+        <form action={saveIntegrations} className="mt-5 space-y-4">
+          <p className="font-mono text-caption tracking-wide text-accent-sun uppercase">Printful</p>
+          <SecretField
+            label="Printful API key"
+            name="printful_api_key"
+            set={!!integ.printful.apiKey}
+          />
+          <TextField
+            label="Printful Store ID"
+            name="printful_store_id"
+            defaultValue={integ.printful.storeId}
+            placeholder="e.g. 17467626"
+          />
+          <SecretField
+            label="Printful webhook secret"
+            name="printful_webhook_secret"
+            set={!!integ.printful.webhookSecret}
+          />
+          <p className="pt-2 font-mono text-caption tracking-wide text-accent-sun uppercase">
+            Printify
+          </p>
+          <SecretField
+            label="Printify API key"
+            name="printify_api_key"
+            set={!!integ.printify.apiKey}
+          />
+          <TextField
+            label="Printify Shop ID"
+            name="printify_shop_id"
+            defaultValue={integ.printify.shopId}
+            placeholder="e.g. 18245866"
+          />
+          <SecretField
+            label="Printify webhook secret"
+            name="printify_webhook_secret"
+            set={!!integ.printify.webhookSecret}
+          />
+          <SubmitButton className="rounded-sm bg-accent-sun px-6 py-3 font-mono text-xs tracking-widest text-surface uppercase">
+            Save integrations
+          </SubmitButton>
+        </form>
+
+        <details className="mt-4 font-mono text-caption text-ink/50">
+          <summary className="cursor-pointer">
+            One-time SQL (run in Supabase if saving fails)
+          </summary>
+          <pre className="mt-2 overflow-x-auto rounded-sm bg-ink/5 p-3 text-[11px] text-ink/70">{`alter table store_settings
+  add column if not exists printful_api_key text,
+  add column if not exists printful_store_id text,
+  add column if not exists printful_webhook_secret text,
+  add column if not exists printify_api_key text,
+  add column if not exists printify_shop_id text,
+  add column if not exists printify_webhook_secret text;
+notify pgrst, 'reload schema';`}</pre>
+        </details>
+      </section>
+
       {audit.length > 0 && (
         <div className="mt-14">
           <p className="font-mono text-caption tracking-wide text-ink/60 uppercase">
@@ -200,6 +308,20 @@ function TextField({
         name={name}
         defaultValue={defaultValue}
         placeholder={placeholder}
+        className="mt-2 block w-full rounded-sm border border-ink/20 bg-surface px-3 py-2 font-mono text-caption text-ink"
+      />
+    </label>
+  );
+}
+function SecretField({ label, name, set }: { label: string; name: string; set: boolean }) {
+  return (
+    <label className="block">
+      <span className="font-mono text-caption tracking-wide text-ink/60 uppercase">{label}</span>
+      <input
+        type="password"
+        name={name}
+        autoComplete="off"
+        placeholder={set ? "•••••••• (set — blank keeps it)" : "not set"}
         className="mt-2 block w-full rounded-sm border border-ink/20 bg-surface px-3 py-2 font-mono text-caption text-ink"
       />
     </label>

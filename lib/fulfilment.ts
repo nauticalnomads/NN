@@ -6,7 +6,7 @@
 //   - transient failures (5xx/timeout) retry up to MAX_RETRIES with backoff
 //   - permanent failures (4xx) create a `notifications` row + flip order status
 import { createServiceClient } from "@/lib/supabase/service";
-import { printfulHeaders } from "@/lib/shipping-printful";
+import { getIntegrationConfig, printfulAuthHeaders } from "@/lib/integrations";
 import { notifyOwner } from "@/lib/notifications";
 
 const MAX_RETRIES = 3; // 1 initial + 2 retries; backoff: 1s, 2s, 4s
@@ -83,7 +83,7 @@ async function placePrintful(order: Order, items: OrderItem[]) {
   };
   const res = await fetch("https://api.printful.com/orders", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...printfulHeaders() },
+    headers: { "Content-Type": "application/json", ...(await printfulAuthHeaders()) },
     body: JSON.stringify(body),
   });
   const j = await res.json();
@@ -92,7 +92,8 @@ async function placePrintful(order: Order, items: OrderItem[]) {
 }
 
 async function placePrintify(order: Order, items: OrderItem[]) {
-  const shop = process.env.PRINTIFY_SHOP_ID;
+  const { printify } = await getIntegrationConfig();
+  const shop = printify.shopId;
   if (!shop) throw new Error("PRINTIFY_SHOP_ID missing");
   const addr = order.shipping_address ?? {};
   const body = {
@@ -120,7 +121,7 @@ async function placePrintify(order: Order, items: OrderItem[]) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.PRINTIFY_API_KEY ?? ""}`,
+      Authorization: `Bearer ${printify.apiKey}`,
     },
     body: JSON.stringify(body),
   });

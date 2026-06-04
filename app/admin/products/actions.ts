@@ -15,7 +15,7 @@ import { importPrintfulProduct } from "@/lib/printful-import";
 // single sync product id, or leave blank to import all new ones.
 export async function importFromPrintful(formData: FormData): Promise<void> {
   await requireStaff();
-  if (!printfulConfigured()) redirect("/admin/products/import?error=nokey");
+  if (!(await printfulConfigured())) redirect("/admin/products/import?error=nokey");
   const single = String(formData.get("sync_id") || "").trim();
   const sb = createServiceClient();
 
