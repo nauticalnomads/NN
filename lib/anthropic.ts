@@ -65,3 +65,41 @@ export async function captionImage(imageUrl: string, brandVoice: string): Promis
     return null;
   }
 }
+
+// Generate concise, SEO/accessibility-friendly alt text for an image.
+// Returns null when no key is configured or the call fails.
+export async function generateAltText(imageUrl: string): Promise<string | null> {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return null;
+  try {
+    const res = await fetch(ANTHROPIC_API, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 120,
+        system:
+          "You write image alt text for an e-commerce site. Describe what is visibly in the photo in one plain, specific sentence under 125 characters. No 'image of'/'photo of' prefixes, no quotes, no marketing fluff.",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "image", source: { type: "url", url: imageUrl } },
+              { type: "text", text: "Write the alt text." },
+            ],
+          },
+        ],
+      }),
+    });
+    if (!res.ok) return null;
+    const j = await res.json();
+    const t = j?.content?.[0]?.text?.trim();
+    return t ? t.slice(0, 140) : null;
+  } catch {
+    return null;
+  }
+}

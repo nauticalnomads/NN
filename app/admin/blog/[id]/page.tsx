@@ -4,6 +4,7 @@ import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { ImageSlot } from "../../content/ImageSlot";
 import { saveBlogPost } from "../actions";
+import { SubmitButton } from "@/components/admin/SubmitButton";
 
 type Post = {
   id: string;
@@ -145,9 +146,9 @@ export default async function BlogEdit({ params }: { params: Promise<{ id: strin
           />
         </label>
 
-        <button className="rounded-sm bg-accent-sun px-6 py-3 font-mono text-xs tracking-widest text-surface uppercase">
+        <SubmitButton className="rounded-sm bg-accent-sun px-6 py-3 font-mono text-xs tracking-widest text-surface uppercase">
           Save post
-        </button>
+        </SubmitButton>
       </form>
     </div>
   );

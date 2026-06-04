@@ -4,6 +4,7 @@ import { getCmsValues } from "@/lib/cms";
 import Link from "next/link";
 import { FooterTagEditor } from "./FooterTagEditor";
 import { ImageSlot } from "./ImageSlot";
+import { SubmitButton } from "@/components/admin/SubmitButton";
 import {
   saveHero,
   saveBanner,
@@ -96,9 +97,9 @@ function LinkField({
 }
 function Save({ label = "Save" }: { label?: string }) {
   return (
-    <button className="mt-4 rounded-sm bg-accent-sun px-5 py-2.5 font-mono text-xs tracking-widest text-surface uppercase">
+    <SubmitButton className="mt-4 rounded-sm bg-accent-sun px-5 py-2.5 font-mono text-xs tracking-widest text-surface uppercase">
       {label}
-    </button>
+    </SubmitButton>
   );
 }
 function Toggle({ name, label, def }: { name: string; label: string; def?: boolean }) {
