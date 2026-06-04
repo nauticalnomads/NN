@@ -6,22 +6,8 @@ import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { autoQueueForProduct } from "@/lib/blog";
 import { generateSeo } from "@/lib/seo";
-import {
-  printfulConfigured,
-  listSyncProducts,
-  getSyncProduct,
-  resolveStoreId,
-} from "@/lib/printful";
-
-function slugify(s: string): string {
-  return (
-    s
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "")
-      .slice(0, 70) || "product"
-  );
-}
+import { printfulConfigured, listSyncProducts, resolveStoreId } from "@/lib/printful";
+import { importPrintfulProduct } from "@/lib/printful-import";
 
 // Import sync products from Printful into the catalogue. Idempotent &
 // non-destructive: only creates products not already mapped (by
@@ -39,9 +25,7 @@ export async function importFromPrintful(formData: FormData): Promise<void> {
   // per-product lookup. Re-run to continue (idempotent: skips existing).
   const MAX_PER_RUN = 8;
 
-  let outcome:
-    | { created: number; skipped: number; variants: number; remaining: number }
-    | { error: string };
+  let outcome: { created: number; skipped: number; remaining: number } | { error: string };
   try {
     const storeId = (await resolveStoreId()) ?? undefined;
     const allIds = single ? [single] : (await listSyncProducts(storeId)).map((p) => String(p.id));
@@ -57,77 +41,16 @@ export async function importFromPrintful(formData: FormData): Promise<void> {
     const newIds = allIds.filter((id) => !have.has(id));
     const batch = newIds.slice(0, MAX_PER_RUN);
     let created = 0,
-      variants = 0,
       failed = 0;
     for (const id of batch) {
-      const detail = await getSyncProduct(id, storeId);
-      const sp = detail.sync_product;
-      const svs = detail.sync_variants ?? [];
-      if (!sp || svs.length === 0) {
-        failed++;
-        continue;
-      }
-      const prices = svs
-        .map((v) => Number(v.retail_price))
-        .filter((n) => Number.isFinite(n) && n > 0);
-      const price = prices.length ? Math.min(...prices) : 0;
-      const currency = svs[0].currency || "GBP";
-      const image =
-        sp.thumbnail_url ||
-        svs.find((v) => v.product?.image)?.product?.image ||
-        svs.flatMap((v) => v.files ?? []).find((f) => f.preview_url)?.preview_url ||
-        null;
-      const { data: prod, error } = await sb
-        .from("products")
-        .insert({
-          title: sp.name,
-          slug: `${slugify(sp.name)}-${String(sp.id).slice(-5)}`,
-          status: "draft",
-          price,
-          currency,
-          provider: "printful",
-          provider_product_id: String(sp.id),
-          source: "printful",
-          source_id: String(sp.id),
-        } as never)
-        .select("id")
-        .single();
-      if (error || !prod) {
-        failed++;
-        continue;
-      }
-      const pid = (prod as unknown as { id: string }).id;
-      const vrows = svs.map((v, i) => ({
-        product_id: pid,
-        title:
-          (v.name || "")
-            .replace(sp.name, "")
-            .replace(/^[\s\-/|]+/, "")
-            .trim() ||
-          v.name ||
-          `Variant ${i + 1}`,
-        sku: v.sku || null,
-        provider_variant_id: String(v.id),
-        price: Number(v.retail_price) || price,
-        sort_order: i,
-      }));
-      await sb.from("variants").insert(vrows as never);
-      variants += vrows.length;
-      if (image) {
-        await sb.from("product_images").insert({
-          product_id: pid,
-          url: image,
-          alt: sp.name,
-          sort_order: 0,
-          is_primary: true,
-        } as never);
-      }
-      created++;
+      // ids are pre-filtered, so skip the redundant existence check.
+      const r = await importPrintfulProduct(sb, id, storeId, { checkExists: false });
+      if (r === "created") created++;
+      else failed++;
     }
     outcome = {
       created,
       skipped: allIds.length - newIds.length + failed,
-      variants,
       remaining: newIds.length - batch.length,
     };
   } catch (e) {
@@ -139,7 +62,7 @@ export async function importFromPrintful(formData: FormData): Promise<void> {
     redirect(`/admin/products/import?error=${encodeURIComponent(outcome.error.slice(0, 140))}`);
   }
   redirect(
-    `/admin/products/import?created=${outcome.created}&skipped=${outcome.skipped}&variants=${outcome.variants}&remaining=${outcome.remaining}`,
+    `/admin/products/import?created=${outcome.created}&skipped=${outcome.skipped}&remaining=${outcome.remaining}`,
   );
 }
 

@@ -1,10 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendShippingConfirmation } from "@/lib/email";
+import { resolveStoreId } from "@/lib/printful";
+import { importPrintfulProduct } from "@/lib/printful-import";
 
-// Printful shipment update webhook (configure in Printful → Webhooks).
-// Updates the order's tracking array + flips to 'shipped' on first shipment,
-// then triggers the customer's shipping email.
+// Printful webhook (configure in Printful → Settings → Webhooks).
+// - package_shipped → update order tracking + email the customer.
+// - product_synced  → auto-create a draft product here (publish-on-Printful → draft-on-admin).
 export async function POST(request: NextRequest) {
   const secret = process.env.PRINTFUL_WEBHOOK_SECRET;
   const provided =
@@ -15,6 +17,17 @@ export async function POST(request: NextRequest) {
 
   const event = await request.json().catch(() => null);
   if (!event) return NextResponse.json({ ok: true });
+
+  // New/changed sync product in the Printful store → draft it here (idempotent).
+  if (event.type === "product_synced" || event.type === "product_updated") {
+    const syncId = event.data?.sync_product?.id;
+    if (syncId) {
+      const sb = createServiceClient();
+      const storeId = (await resolveStoreId().catch(() => null)) ?? undefined;
+      await importPrintfulProduct(sb, syncId, storeId).catch(() => undefined);
+    }
+    return NextResponse.json({ ok: true });
+  }
 
   if (event.type === "package_shipped") {
     const sb = createServiceClient();

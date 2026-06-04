@@ -91,8 +91,8 @@ export default async function PrintfulImport({
       )}
       {sp.created != null && (
         <div className="mt-6 rounded-sm border border-accent-sea/30 bg-accent-sea/5 px-4 py-3 font-body text-caption text-ink">
-          Imported <strong>{sp.created}</strong> product(s) with <strong>{sp.variants ?? 0}</strong>{" "}
-          variant(s); skipped {sp.skipped ?? 0} already-mapped.{" "}
+          Imported <strong>{sp.created}</strong> product(s); skipped {sp.skipped ?? 0}{" "}
+          already-mapped.{" "}
           {Number(sp.remaining) > 0 && (
             <strong>
               {sp.remaining} new product(s) remaining — click Import again to continue.{" "}
