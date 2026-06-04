@@ -4,6 +4,46 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { uploadImage } from "@/lib/storage";
+import { generateSeo } from "@/lib/seo";
+
+// AI-fill SEO title + description for a collection (uses its hierarchical name).
+export async function generateCollectionSeo(formData: FormData): Promise<void> {
+  await requireStaff();
+  const id = String(formData.get("id") || "");
+  if (!id) return;
+  const sb = createServiceClient();
+  const { data } = await sb
+    .from("collections")
+    .select("title, gender, parent_slug")
+    .eq("id", id)
+    .maybeSingle();
+  const c = data as unknown as {
+    title: string;
+    gender: string | null;
+    parent_slug: string | null;
+  } | null;
+  if (!c) return;
+  let parentTitle = "";
+  if (c.parent_slug) {
+    const { data: pd } = await sb
+      .from("collections")
+      .select("title")
+      .eq("slug", c.parent_slug)
+      .maybeSingle();
+    parentTitle = (pd as unknown as { title: string } | null)?.title ?? "";
+  }
+  const g = c.gender === "men" ? "Men's" : c.gender === "women" ? "Women's" : "";
+  const label = [g, parentTitle && parentTitle !== c.title ? parentTitle : "", c.title]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  const seo = await generateSeo({ label, kind: "product category page" });
+  await sb
+    .from("collections")
+    .update(seo as never)
+    .eq("id", id);
+  revalidatePath(`/admin/collections/${id}`);
+}
 
 // Collections admin (redesign v2 §8). Create/edit collections, assign products,
 // bulk-tag ungrouped products. Content admin may manage products/collections.
