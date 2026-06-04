@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { ImageSlot } from "../../content/ImageSlot";
-import { saveCollection, assignProduct, unassignProduct } from "../actions";
+import { saveCollection, assignProduct, unassignProduct, generateCollectionSeo } from "../actions";
 
 type ProdImg = { url: string; is_primary: boolean; sort_order: number };
 type Prod = { id: string; title: string; slug: string; product_images: ProdImg[] };
@@ -141,19 +141,33 @@ export default async function CollectionEdit({
             </select>
           </Field>
           <Field label="SEO title">
-            <input name="seo_title" defaultValue={c.seo_title ?? ""} className={input} />
+            <input
+              key={c.seo_title ?? ""}
+              name="seo_title"
+              defaultValue={c.seo_title ?? ""}
+              className={input}
+            />
           </Field>
           <Field label="SEO description">
             <textarea
+              key={c.seo_description ?? ""}
               name="seo_description"
               defaultValue={c.seo_description ?? ""}
               rows={3}
               className={input}
             />
           </Field>
-          <button className="rounded-sm bg-accent-sun px-6 py-3 font-mono text-xs tracking-widest text-surface uppercase">
-            Save details
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button className="rounded-sm bg-accent-sun px-6 py-3 font-mono text-xs tracking-widest text-surface uppercase">
+              Save details
+            </button>
+            <button
+              formAction={generateCollectionSeo}
+              className="rounded-sm border border-ink/25 px-4 py-3 font-mono text-xs tracking-widest text-ink/70 uppercase hover:border-accent-sun hover:text-accent-sun"
+            >
+              ✨ Generate SEO with AI
+            </button>
+          </div>
         </form>
 
         {/* Product assignment */}

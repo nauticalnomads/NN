@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { formatPrice } from "@/lib/format";
-import { updateProduct } from "../actions";
+import { updateProduct, generateProductSeo } from "../actions";
 
 type Product = {
   id: string;
@@ -96,6 +96,7 @@ export default async function ProductEditPage({ params }: { params: Promise<{ id
 
         <Field label="SEO title">
           <input
+            key={p.seo_title ?? ""}
             type="text"
             name="seo_title"
             defaultValue={p.seo_title ?? ""}
@@ -104,6 +105,7 @@ export default async function ProductEditPage({ params }: { params: Promise<{ id
         </Field>
         <Field label="SEO description">
           <textarea
+            key={p.seo_description ?? ""}
             name="seo_description"
             defaultValue={p.seo_description ?? ""}
             rows={3}
@@ -111,9 +113,17 @@ export default async function ProductEditPage({ params }: { params: Promise<{ id
           />
         </Field>
 
-        <button className="rounded-sm bg-accent-sun px-6 py-3 font-mono text-xs tracking-widest text-surface uppercase">
-          Save
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button className="rounded-sm bg-accent-sun px-6 py-3 font-mono text-xs tracking-widest text-surface uppercase">
+            Save
+          </button>
+          <button
+            formAction={generateProductSeo}
+            className="rounded-sm border border-ink/25 px-4 py-3 font-mono text-xs tracking-widest text-ink/70 uppercase hover:border-accent-sun hover:text-accent-sun"
+          >
+            ✨ Generate SEO with AI
+          </button>
+        </div>
       </form>
     </div>
   );

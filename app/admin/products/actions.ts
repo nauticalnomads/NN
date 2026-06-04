@@ -4,6 +4,36 @@ import { revalidatePath } from "next/cache";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { autoQueueForProduct } from "@/lib/blog";
+import { generateSeo } from "@/lib/seo";
+
+// AI-fill SEO title + description for a single product.
+export async function generateProductSeo(formData: FormData): Promise<void> {
+  await requireStaff();
+  const id = String(formData.get("product_id") || "");
+  if (!id) return;
+  const sb = createServiceClient();
+  const { data } = await sb
+    .from("products")
+    .select("title, description, category_slug")
+    .eq("id", id)
+    .maybeSingle();
+  const p = data as unknown as {
+    title: string;
+    description: string | null;
+    category_slug: string | null;
+  } | null;
+  if (!p) return;
+  const seo = await generateSeo({
+    label: p.title,
+    kind: "product",
+    context: [p.category_slug, p.description?.slice(0, 200)].filter(Boolean).join(" — "),
+  });
+  await sb
+    .from("products")
+    .update(seo as never)
+    .eq("id", id);
+  revalidatePath(`/admin/products/${id}`);
+}
 
 // Publish or unpublish a product. On a draft → published transition we auto-queue
 // a blog draft (§B-13). De-dup lives in autoQueueForProduct. Content admin may
