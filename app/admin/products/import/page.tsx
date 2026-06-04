@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireStaff } from "@/lib/auth";
-import { printfulConfigured } from "@/lib/printful";
+import { printfulConfigured, getStores } from "@/lib/printful";
 import { importFromPrintful } from "../actions";
 import { SubmitButton } from "@/components/admin/SubmitButton";
 
@@ -12,6 +12,19 @@ export default async function PrintfulImport({
   await requireStaff();
   const sp = await searchParams;
   const configured = printfulConfigured();
+
+  // Live connection check: list accessible stores (also reveals the store id).
+  let conn:
+    | { ok: true; stores: { id: number; name: string }[] }
+    | { ok: false; error: string }
+    | null = null;
+  if (configured) {
+    try {
+      conn = { ok: true, stores: await getStores() };
+    } catch (e) {
+      conn = { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
 
   return (
     <div className="max-w-2xl">
@@ -30,11 +43,38 @@ export default async function PrintfulImport({
         set the category &amp; price, then publish.
       </p>
 
+      {/* Connection status — confirms the key works and shows the store id(s). */}
+      {configured && conn?.ok && (
+        <div className="mt-6 rounded-sm border border-accent-sea/30 bg-accent-sea/5 px-4 py-3 font-body text-caption text-ink">
+          {conn.stores.length === 0 ? (
+            <>
+              ✓ Connected. Your token is <strong>store-scoped</strong> — no Store ID needed; import
+              works as-is.
+            </>
+          ) : (
+            <>
+              ✓ Connected to Printful. Store{conn.stores.length > 1 ? "s" : ""}:{" "}
+              <span className="font-mono">
+                {conn.stores.map((s) => `${s.name} — ID ${s.id}`).join("; ")}
+              </span>
+              {conn.stores.length === 1
+                ? " — auto-detected, no need to set PRINTFUL_STORE_ID."
+                : " — set PRINTFUL_STORE_ID to the one you want."}
+            </>
+          )}
+        </div>
+      )}
+      {configured && conn && !conn.ok && (
+        <div className="mt-6 rounded-sm border border-red-400/50 bg-red-50 px-4 py-3 font-body text-caption text-ink">
+          Couldn&apos;t reach Printful with the current key: {conn.error}. The import may still work
+          if your token is store-scoped — try it below.
+        </div>
+      )}
+
       {!configured && (
         <div className="mt-6 rounded-sm border border-accent-sun/40 bg-accent-sun/5 px-4 py-3 font-body text-caption text-ink">
-          <strong>PRINTFUL_API_KEY is not set.</strong> Add it (and <code>PRINTFUL_STORE_ID</code>{" "}
-          if your token covers multiple stores) as a secret on the Cloudflare Worker, then reload
-          this page.
+          <strong>PRINTFUL_API_KEY is not set.</strong> Add it as a secret on the Cloudflare Worker,
+          then reload this page. A Store ID is usually <em>not</em> needed.
         </div>
       )}
 
