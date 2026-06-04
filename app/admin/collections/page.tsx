@@ -10,7 +10,10 @@ type Row = {
   gender: string | null;
   parent_slug: string | null;
   status: string;
+  sort_order: number | null;
 };
+
+const ROOT_ORDER: Record<string, number> = { men: 0, women: 1, accessories: 2 };
 
 export default async function AdminCollections() {
   await requireStaff();
@@ -18,10 +21,30 @@ export default async function AdminCollections() {
 
   const { data } = await sb
     .from("collections")
-    .select("id, slug, title, gender, parent_slug, status")
-    .order("gender")
+    .select("id, slug, title, gender, parent_slug, status, sort_order")
     .order("sort_order");
   const rows = (data as unknown as Row[]) ?? [];
+
+  // Arrange as the live hierarchy: roots (Men/Women/Accessories) → categories →
+  // subcategories, each ordered by sort_order. Carries a depth for indentation.
+  const childrenOf = (slug: string | null) =>
+    rows
+      .filter((r) => r.parent_slug === slug)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  const ordered: Array<Row & { depth: number }> = [];
+  const walk = (slug: string, depth: number) => {
+    const node = rows.find((r) => r.slug === slug);
+    if (!node) return;
+    ordered.push({ ...node, depth });
+    childrenOf(slug).forEach((c) => walk(c.slug, depth + 1));
+  };
+  rows
+    .filter((r) => !r.parent_slug)
+    .sort((a, b) => (ROOT_ORDER[a.slug] ?? 99) - (ROOT_ORDER[b.slug] ?? 99))
+    .forEach((root) => walk(root.slug, 0));
+  // Any orphans (parent not found) appended so nothing is hidden.
+  const seen = new Set(ordered.map((o) => o.id));
+  rows.filter((r) => !seen.has(r.id)).forEach((r) => ordered.push({ ...r, depth: 0 }));
 
   // Product counts per collection.
   const { data: cp } = await sb.from("collection_products").select("collection_id");
@@ -59,18 +82,29 @@ export default async function AdminCollections() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((c) => {
+            {ordered.map((c) => {
               const count = counts.get(c.id) ?? 0;
               return (
-                <tr key={c.id} className="border-t border-ink/10 font-body text-body text-ink">
+                <tr
+                  key={c.id}
+                  className={`border-t border-ink/10 font-body text-body text-ink ${
+                    c.depth === 0 ? "bg-surface-2/40 font-medium" : ""
+                  }`}
+                >
                   <td className="px-4 py-3">
-                    <Link
-                      href={`/admin/collections/${c.id}`}
-                      className="text-ink no-underline hover:text-accent-sun"
+                    <span
+                      style={{ paddingLeft: `${c.depth * 1.5}rem` }}
+                      className="inline-flex items-baseline"
                     >
-                      {c.title}
-                    </Link>
-                    <span className="ml-2 font-mono text-caption text-ink/40">/{c.slug}</span>
+                      {c.depth > 0 && <span className="mr-2 text-ink/30">└</span>}
+                      <Link
+                        href={`/admin/collections/${c.id}`}
+                        className="text-ink no-underline hover:text-accent-sun"
+                      >
+                        {c.title}
+                      </Link>
+                      <span className="ml-2 font-mono text-caption text-ink/40">/{c.slug}</span>
+                    </span>
                   </td>
                   <td className="px-4 py-3 font-mono text-caption">{c.gender ?? "—"}</td>
                   <td className="px-4 py-3 font-mono text-caption text-ink/60">
