@@ -6,7 +6,12 @@ import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { autoQueueForProduct } from "@/lib/blog";
 import { generateSeo } from "@/lib/seo";
-import { printfulConfigured, listSyncProducts, getSyncProduct } from "@/lib/printful";
+import {
+  printfulConfigured,
+  listSyncProducts,
+  getSyncProduct,
+  resolveStoreId,
+} from "@/lib/printful";
 
 function slugify(s: string): string {
   return (
@@ -30,7 +35,8 @@ export async function importFromPrintful(formData: FormData): Promise<void> {
 
   let outcome: { created: number; skipped: number; variants: number } | { error: string };
   try {
-    const ids = single ? [single] : (await listSyncProducts()).map((p) => String(p.id));
+    const storeId = (await resolveStoreId()) ?? undefined;
+    const ids = single ? [single] : (await listSyncProducts(storeId)).map((p) => String(p.id));
     let created = 0,
       skipped = 0,
       variants = 0;
@@ -45,7 +51,7 @@ export async function importFromPrintful(formData: FormData): Promise<void> {
         skipped++;
         continue;
       }
-      const detail = await getSyncProduct(id);
+      const detail = await getSyncProduct(id, storeId);
       const sp = detail.sync_product;
       const svs = detail.sync_variants ?? [];
       if (!sp || svs.length === 0) {
