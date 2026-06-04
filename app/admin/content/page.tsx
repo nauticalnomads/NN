@@ -1,7 +1,7 @@
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getCmsValues } from "@/lib/cms";
-import { NAV } from "@/lib/navigation";
+import Link from "next/link";
 import { FooterTagEditor } from "./FooterTagEditor";
 import { ImageSlot } from "./ImageSlot";
 import {
@@ -11,7 +11,6 @@ import {
   saveStrip,
   saveTiles,
   saveCarousel,
-  saveMegaImage,
   saveNewsletterSettings,
 } from "./actions";
 
@@ -128,10 +127,6 @@ export default async function AdminContent() {
     "footer.tags",
     "newsletter.settings",
   ]);
-  const megaKeys = NAV.flatMap((n) =>
-    n.columns.map((c) => ({ key: c.imageKey, label: `${n.label} · ${c.heading}` })),
-  );
-  const megaVals = await getCmsValues(megaKeys.map((m) => m.key));
 
   // Published collections — for the carousel picker and the link dropdowns.
   const sb = createServiceClient();
@@ -386,29 +381,17 @@ export default async function AdminContent() {
         </form>
       </Card>
 
-      {/* Mega menu images */}
-      <Card title="Mega menu images" desc="One image per nav column (§7.7).">
-        <div className="grid gap-3 sm:grid-cols-2">
-          {megaKeys.map((m) => {
-            const v = (megaVals[m.key] ?? {}) as { url?: string };
-            return (
-              <form
-                key={m.key}
-                action={saveMegaImage}
-                className="rounded-sm border border-ink/10 p-2"
-              >
-                <input type="hidden" name="image_key" value={m.key} />
-                <ImageSlot name="" label={m.label} current={v.url} rec="16:9" />
-                <button className="mt-2 rounded-sm bg-ink px-3 py-1 font-mono text-xs tracking-widest text-surface uppercase">
-                  Upload
-                </button>
-              </form>
-            );
-          })}
-        </div>
-        <p className="mt-2 font-mono text-[11px] text-ink/40">
-          The file/alt inputs above each Upload button are named generically; the column key is
-          submitted with each form.
+      {/* Mega menu images — now driven by each collection's cover photo */}
+      <Card title="Mega menu images" desc="Driven by the live collection taxonomy (§2.3).">
+        <p className="font-body text-body text-ink/70">
+          The mega menu is generated automatically from your published collections, and each
+          category&apos;s image is its <strong>cover photo</strong>. Set or change them per category
+          in{" "}
+          <Link href="/admin/collections" className="text-accent-sun underline">
+            Collections
+          </Link>{" "}
+          → open a category → <em>Cover photo</em>. Publishing/unpublishing a collection shows or
+          hides it in the menu.
         </p>
       </Card>
 
