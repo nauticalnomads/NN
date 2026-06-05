@@ -6,6 +6,7 @@ import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { autoQueueForProduct } from "@/lib/blog";
 import { generateSeo } from "@/lib/seo";
+import { uploadImage } from "@/lib/storage";
 import { printfulConfigured, listSyncProducts, resolveStoreId } from "@/lib/printful";
 import { importPrintfulProduct } from "@/lib/printful-import";
 
@@ -229,6 +230,7 @@ export async function updateProduct(formData: FormData): Promise<void> {
   const featured = formData.get("featured") === "on";
   const seo_title = String(formData.get("seo_title") || "").trim() || null;
   const seo_description = String(formData.get("seo_description") || "").trim() || null;
+  const description = String(formData.get("description") || "").trim() || null;
 
   // Guard against bad numeric input — leave price untouched if invalid.
   const safePrice = Number.isFinite(price) && price >= 0 ? price : old.price;
@@ -246,6 +248,7 @@ export async function updateProduct(formData: FormData): Promise<void> {
       featured,
       seo_title,
       seo_description,
+      description,
     } as never)
     .eq("id", productId);
 
@@ -261,4 +264,141 @@ export async function updateProduct(formData: FormData): Promise<void> {
 
   revalidatePath("/admin/products");
   revalidatePath(`/admin/products/${productId}`);
+}
+
+// ── Product images ───────────────────────────────────────────────────────────
+async function productSlug(sb: ReturnType<typeof createServiceClient>, productId: string) {
+  const { data } = await sb.from("products").select("slug").eq("id", productId).maybeSingle();
+  return (data as unknown as { slug?: string } | null)?.slug;
+}
+function revalImages(slug: string | undefined, productId: string) {
+  revalidatePath(`/admin/products/${productId}`);
+  if (slug) revalidatePath(`/products/${slug}`);
+}
+
+// Upload one or more photos for a product (appended to the end of the gallery).
+export async function addProductImages(formData: FormData): Promise<void> {
+  await requireStaff();
+  const productId = String(formData.get("product_id") || "");
+  if (!productId) return;
+  const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
+  if (!files.length) return;
+  const sb = createServiceClient();
+  const { data: prod } = await sb
+    .from("products")
+    .select("title, slug")
+    .eq("id", productId)
+    .maybeSingle();
+  const title = (prod as unknown as { title?: string } | null)?.title ?? "";
+  const { data: imgs } = await sb
+    .from("product_images")
+    .select("sort_order")
+    .eq("product_id", productId);
+  const existing = (imgs as unknown as { sort_order: number }[]) ?? [];
+  let nextSort = existing.length ? Math.max(...existing.map((i) => i.sort_order ?? 0)) + 1 : 0;
+  const hadNone = existing.length === 0;
+  for (let k = 0; k < files.length; k++) {
+    const url = await uploadImage(files[k], `products/${productId}`);
+    if (!url) continue;
+    await sb.from("product_images").insert({
+      product_id: productId,
+      url,
+      alt: title,
+      sort_order: nextSort,
+      is_primary: hadNone && k === 0,
+    } as never);
+    nextSort++;
+  }
+  revalImages((prod as unknown as { slug?: string } | null)?.slug, productId);
+}
+
+// Swap a photo with its neighbour (reorder up/down).
+export async function moveProductImage(formData: FormData): Promise<void> {
+  await requireStaff();
+  const imageId = String(formData.get("image_id") || "");
+  const dir = String(formData.get("dir") || "");
+  if (!imageId) return;
+  const sb = createServiceClient();
+  const { data: img } = await sb
+    .from("product_images")
+    .select("id, product_id, sort_order")
+    .eq("id", imageId)
+    .maybeSingle();
+  const cur = img as unknown as { id: string; product_id: string; sort_order: number } | null;
+  if (!cur) return;
+  const { data: sibs } = await sb
+    .from("product_images")
+    .select("id, sort_order")
+    .eq("product_id", cur.product_id)
+    .order("sort_order", { ascending: true });
+  const list = (sibs as unknown as { id: string; sort_order: number }[]) ?? [];
+  const idx = list.findIndex((x) => x.id === imageId);
+  const swap = dir === "up" ? idx - 1 : idx + 1;
+  if (swap < 0 || swap >= list.length) return;
+  const other = list[swap];
+  await sb
+    .from("product_images")
+    .update({ sort_order: other.sort_order } as never)
+    .eq("id", cur.id);
+  await sb
+    .from("product_images")
+    .update({ sort_order: cur.sort_order } as never)
+    .eq("id", other.id);
+  revalImages(await productSlug(sb, cur.product_id), cur.product_id);
+}
+
+// Make a photo the primary (main) image.
+export async function setPrimaryProductImage(formData: FormData): Promise<void> {
+  await requireStaff();
+  const imageId = String(formData.get("image_id") || "");
+  if (!imageId) return;
+  const sb = createServiceClient();
+  const { data: img } = await sb
+    .from("product_images")
+    .select("product_id")
+    .eq("id", imageId)
+    .maybeSingle();
+  const productId = (img as unknown as { product_id?: string } | null)?.product_id;
+  if (!productId) return;
+  await sb
+    .from("product_images")
+    .update({ is_primary: false } as never)
+    .eq("product_id", productId);
+  await sb
+    .from("product_images")
+    .update({ is_primary: true } as never)
+    .eq("id", imageId);
+  revalImages(await productSlug(sb, productId), productId);
+}
+
+// Delete a photo. If it was primary, promote the next one.
+export async function deleteProductImage(formData: FormData): Promise<void> {
+  await requireStaff();
+  const imageId = String(formData.get("image_id") || "");
+  if (!imageId) return;
+  const sb = createServiceClient();
+  const { data: img } = await sb
+    .from("product_images")
+    .select("product_id, is_primary")
+    .eq("id", imageId)
+    .maybeSingle();
+  const cur = img as unknown as { product_id: string; is_primary: boolean } | null;
+  if (!cur) return;
+  await sb.from("product_images").delete().eq("id", imageId);
+  if (cur.is_primary) {
+    const { data: next } = await sb
+      .from("product_images")
+      .select("id")
+      .eq("product_id", cur.product_id)
+      .order("sort_order", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const nextId = (next as unknown as { id?: string } | null)?.id;
+    if (nextId)
+      await sb
+        .from("product_images")
+        .update({ is_primary: true } as never)
+        .eq("id", nextId);
+  }
+  revalImages(await productSlug(sb, cur.product_id), cur.product_id);
 }
