@@ -25,10 +25,26 @@ export async function importFromPrintful(formData: FormData): Promise<void> {
   // per-product lookup. Re-run to continue (idempotent: skips existing).
   const MAX_PER_RUN = 8;
 
-  let outcome: { created: number; skipped: number; remaining: number } | { error: string };
+  let outcome:
+    | { created: number; skipped: number; failed: number; remaining: number }
+    | { error: string };
   try {
     const storeId = (await resolveStoreId()) ?? undefined;
-    const allIds = single ? [single] : (await listSyncProducts(storeId)).map((p) => String(p.id));
+
+    // Single product (pasted id or "Import" button from the list).
+    if (single) {
+      const r = await importPrintfulProduct(sb, single, storeId);
+      revalidatePath("/admin/products");
+      if (r === "created") redirect(`/admin/products/import?created=1&skipped=0&remaining=0`);
+      if (r === "exists") redirect(`/admin/products/import?created=0&skipped=1&remaining=0`);
+      redirect(
+        `/admin/products/import?error=${encodeURIComponent(
+          `No Printful sync product found for "${single}". Use the Sync Product ID (the number in the product's Printful URL) or its external/Shopify ID — or just pick from the list below.`,
+        )}`,
+      );
+    }
+
+    const allIds = (await listSyncProducts(storeId)).map((p) => String(p.id));
     const { data: existRows } = await sb
       .from("products")
       .select("provider_product_id")
@@ -43,14 +59,14 @@ export async function importFromPrintful(formData: FormData): Promise<void> {
     let created = 0,
       failed = 0;
     for (const id of batch) {
-      // ids are pre-filtered, so skip the redundant existence check.
-      const r = await importPrintfulProduct(sb, id, storeId, { checkExists: false });
+      const r = await importPrintfulProduct(sb, id, storeId);
       if (r === "created") created++;
-      else failed++;
+      else if (r !== "exists") failed++;
     }
     outcome = {
       created,
-      skipped: allIds.length - newIds.length + failed,
+      skipped: allIds.length - newIds.length,
+      failed,
       remaining: newIds.length - batch.length,
     };
   } catch (e) {
@@ -59,10 +75,10 @@ export async function importFromPrintful(formData: FormData): Promise<void> {
 
   revalidatePath("/admin/products");
   if ("error" in outcome) {
-    redirect(`/admin/products/import?error=${encodeURIComponent(outcome.error.slice(0, 140))}`);
+    redirect(`/admin/products/import?error=${encodeURIComponent(outcome.error.slice(0, 200))}`);
   }
   redirect(
-    `/admin/products/import?created=${outcome.created}&skipped=${outcome.skipped}&remaining=${outcome.remaining}`,
+    `/admin/products/import?created=${outcome.created}&skipped=${outcome.skipped}&failed=${outcome.failed}&remaining=${outcome.remaining}`,
   );
 }
 
