@@ -23,29 +23,36 @@ export async function importPrintfulProduct(
   sb: SB,
   syncId: string | number,
   storeId?: string,
-  opts: { checkExists?: boolean } = {},
 ): Promise<ImportResult> {
-  const id = String(syncId);
-  if (opts.checkExists !== false) {
-    const { data: ex } = await sb
-      .from("products")
-      .select("id")
-      .eq("provider", "printful")
-      .eq("provider_product_id", id)
-      .maybeSingle();
-    if (ex) return "exists";
-  }
+  const id = String(syncId).trim();
 
+  // Look up the sync product. Accept either the sync product id or an external
+  // id (Shopify id when the store is Shopify-connected) via the "@" form.
   let sp: { id: number; name: string; thumbnail_url?: string };
   let svs: Awaited<ReturnType<typeof getSyncProduct>>["sync_variants"];
   try {
-    const detail = await getSyncProduct(id, storeId);
+    let detail;
+    try {
+      detail = await getSyncProduct(id, storeId);
+    } catch {
+      detail = await getSyncProduct(id.startsWith("@") ? id : `@${id}`, storeId);
+    }
     sp = detail.sync_product;
     svs = detail.sync_variants ?? [];
   } catch {
     return "error";
   }
   if (!sp || svs.length === 0) return "empty";
+
+  // Dedupe on the canonical sync product id (not whatever was pasted).
+  const canonical = String(sp.id);
+  const { data: ex } = await sb
+    .from("products")
+    .select("id")
+    .eq("provider", "printful")
+    .eq("provider_product_id", canonical)
+    .maybeSingle();
+  if (ex) return "exists";
 
   const prices = svs.map((v) => Number(v.retail_price)).filter((n) => Number.isFinite(n) && n > 0);
   const price = prices.length ? Math.min(...prices) : 0;
@@ -60,14 +67,14 @@ export async function importPrintfulProduct(
     .from("products")
     .insert({
       title: sp.name,
-      slug: `${slugify(sp.name)}-${id.slice(-5)}`,
+      slug: `${slugify(sp.name)}-${canonical.slice(-5)}`,
       status: "draft",
       price,
       currency,
       provider: "printful",
-      provider_product_id: id,
+      provider_product_id: canonical,
       source: "printful",
-      source_id: id,
+      source_id: canonical,
     } as never)
     .select("id")
     .single();
