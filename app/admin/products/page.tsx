@@ -17,6 +17,7 @@ type Row = {
   provider: string | null;
   base_cost: number | null;
   category_slug: string | null;
+  gender: string | null;
   product_images: Img[];
 };
 
@@ -58,7 +59,7 @@ export default async function AdminProducts({
   let query = sb
     .from("products")
     .select(
-      "id, slug, title, status, price, currency, provider, base_cost, category_slug, product_images(url, is_primary, sort_order)",
+      "id, slug, title, status, price, currency, provider, base_cost, category_slug, gender, product_images(url, is_primary, sort_order)",
     )
     .order("title")
     .limit(1000);
@@ -144,12 +145,17 @@ function ProductTable({
                     <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-sm bg-driftwood">
                       {src && <Image src={src} alt="" fill unoptimized className="object-cover" />}
                     </div>
-                    <Link
-                      href={`/admin/products/${p.id}`}
-                      className="text-ink no-underline hover:text-accent-sun"
-                    >
-                      {p.title}
-                    </Link>
+                    <div className="min-w-0">
+                      <Link
+                        href={`/admin/products/${p.id}`}
+                        className="text-ink no-underline hover:text-accent-sun"
+                      >
+                        {p.title}
+                      </Link>
+                      <p className="font-mono text-[11px] text-ink/40">
+                        <span className="uppercase">{p.gender ?? "—"}</span> · /{p.slug}
+                      </p>
+                    </div>
                   </div>
                 </td>
                 <td className="px-4 py-3">
