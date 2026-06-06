@@ -71,13 +71,40 @@ export default async function CollectionEdit({
   const { data: foundRows } = await search;
   const found = ((foundRows ?? []) as unknown as Prod[]).filter((p) => !assignedIds.has(p.id));
 
-  // Parent options.
+  // Parent options: any collection except this one and its own descendants
+  // (so you can nest under a category, e.g. Women › Tops, without making a loop).
   const { data: parents } = await sb
     .from("collections")
-    .select("slug, title")
-    .is("parent_slug", null)
+    .select("slug, title, parent_slug, gender")
+    .order("gender")
     .order("title");
-  const parentOpts = (parents as unknown as { slug: string; title: string }[]) ?? [];
+  const allCols =
+    (parents as unknown as {
+      slug: string;
+      title: string;
+      parent_slug: string | null;
+      gender: string | null;
+    }[]) ?? [];
+  const descendants = new Set<string>();
+  let frontier = [c.slug];
+  while (frontier.length) {
+    const next: string[] = [];
+    for (const s of frontier) {
+      for (const x of allCols)
+        if (x.parent_slug === s) {
+          descendants.add(x.slug);
+          next.push(x.slug);
+        }
+    }
+    frontier = next;
+  }
+  const colTitle = Object.fromEntries(allCols.map((x) => [x.slug, x.title]));
+  const parentOpts = allCols
+    .filter((x) => x.slug !== c.slug && !descendants.has(x.slug))
+    .map((x) => ({
+      value: x.slug,
+      label: x.parent_slug ? `${colTitle[x.parent_slug] ?? x.parent_slug} › ${x.title}` : x.title,
+    }));
 
   return (
     <div className="max-w-4xl">
@@ -135,8 +162,8 @@ export default async function CollectionEdit({
             <select name="parent_slug" defaultValue={c.parent_slug ?? ""} className={input}>
               <option value="">None (top-level)</option>
               {parentOpts.map((p) => (
-                <option key={p.slug} value={p.slug}>
-                  {p.title}
+                <option key={p.value} value={p.value}>
+                  {p.label}
                 </option>
               ))}
             </select>
