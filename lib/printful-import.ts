@@ -54,6 +54,18 @@ export async function importPrintfulProduct(
     .maybeSingle();
   if (ex) return "exists";
 
+  // Also dedupe by title: the same designs already exist on the site (imported
+  // earlier / from another store) under different sync ids, so an id match
+  // alone misses them. Escape PostgREST ilike wildcards so the name matches
+  // literally (case-insensitive).
+  const titlePattern = sp.name.trim().replace(/[%_\\]/g, "\\$&");
+  const { data: exName } = await sb
+    .from("products")
+    .select("id")
+    .ilike("title", titlePattern)
+    .limit(1);
+  if (Array.isArray(exName) && exName.length > 0) return "exists";
+
   const prices = svs.map((v) => Number(v.retail_price)).filter((n) => Number.isFinite(n) && n > 0);
   const price = prices.length ? Math.min(...prices) : 0;
   const currency = svs[0].currency || "GBP";

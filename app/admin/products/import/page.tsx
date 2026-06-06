@@ -38,16 +38,15 @@ export default async function PrintfulImport({
       const storeId = (await resolveStoreId()) ?? undefined;
       const all = await listSyncProducts(storeId);
       const sbv = createServiceClient();
-      const { data: ex } = await sbv
-        .from("products")
-        .select("provider_product_id")
-        .eq("provider", "printful");
-      const have = new Set(
-        ((ex as unknown as { provider_product_id: string | null }[]) ?? []).map((r) =>
-          String(r.provider_product_id),
-        ),
-      );
-      available = all.filter((p) => !have.has(String(p.id)));
+      // Match already-imported products by provider id AND by name — the same
+      // designs exist under different sync ids (other store / re-sync), so id
+      // alone misses them and they'd wrongly show as "new".
+      const { data: ex } = await sbv.from("products").select("provider_product_id, title");
+      const rows = (ex as unknown as { provider_product_id: string | null; title: string }[]) ?? [];
+      const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+      const haveIds = new Set(rows.map((r) => String(r.provider_product_id)));
+      const haveNames = new Set(rows.map((r) => norm(r.title)));
+      available = all.filter((p) => !haveIds.has(String(p.id)) && !haveNames.has(norm(p.name)));
     } catch (e) {
       availErr = e instanceof Error ? e.message : String(e);
     }
