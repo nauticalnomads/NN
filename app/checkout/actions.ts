@@ -105,62 +105,78 @@ export async function createCheckoutSession(
 
   // Build Stripe line items + flat shipping option.
   const stripe = getStripe();
-  const lineItems = items.map((i) => ({
-    quantity: i.quantity,
-    price_data: {
-      currency,
-      unit_amount: Math.round(i.price * 100),
-      product_data: {
-        name: i.variantTitle ? `${i.title} — ${i.variantTitle}` : i.title,
-        ...(i.imageUrl ? { images: [i.imageUrl] } : {}),
-        metadata: { sku: i.sku, variant_id: i.variantId, product_id: i.productId },
-      },
-    },
-  }));
-
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    customer_email: email,
-    line_items: lineItems,
-    shipping_address_collection: {
-      allowed_countries: [
-        "GB",
-        "IE",
-        "FR",
-        "DE",
-        "ES",
-        "IT",
-        "NL",
-        "BE",
-        "PT",
-        "SE",
-        "DK",
-        "PL",
-        "AT",
-        "US",
-        "CA",
-        "AU",
-        "NZ",
-      ],
-    },
-    shipping_options: [
-      {
-        shipping_rate_data: {
-          type: "fixed_amount",
-          fixed_amount: { amount: Math.round(shipping.rate * 100), currency },
-          display_name: `${shipping.zone} shipping`,
+  const lineItems = items.map((i) => {
+    // Stripe rejects the whole session if any image isn't a valid absolute
+    // http(s) URL (relative paths, blank strings, or data: URIs all throw).
+    // Many catalogue items were imported from Printful/Printify, so guard it.
+    const image = safeImageUrl(i.imageUrl);
+    return {
+      quantity: i.quantity,
+      price_data: {
+        currency,
+        unit_amount: Math.round(i.price * 100),
+        product_data: {
+          name: i.variantTitle ? `${i.title} — ${i.variantTitle}` : i.title,
+          ...(image ? { images: [image] } : {}),
+          metadata: { sku: i.sku, variant_id: i.variantId, product_id: i.productId },
         },
       },
-    ],
-    success_url: absoluteUrl(`/orders/${orderId}?session_id={CHECKOUT_SESSION_ID}`),
-    cancel_url: absoluteUrl("/cart"),
-    payment_intent_data: {
-      // Stored on the PaymentIntent so the webhook can correlate back without
-      // a Stripe → Supabase query roundtrip.
-      metadata: { order_id: orderId },
-    },
-    metadata: { order_id: orderId },
+    };
   });
+
+  let session;
+  try {
+    session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      customer_email: email,
+      line_items: lineItems,
+      shipping_address_collection: {
+        allowed_countries: [
+          "GB",
+          "IE",
+          "FR",
+          "DE",
+          "ES",
+          "IT",
+          "NL",
+          "BE",
+          "PT",
+          "SE",
+          "DK",
+          "PL",
+          "AT",
+          "US",
+          "CA",
+          "AU",
+          "NZ",
+        ],
+      },
+      shipping_options: [
+        {
+          shipping_rate_data: {
+            type: "fixed_amount",
+            fixed_amount: { amount: Math.round(shipping.rate * 100), currency },
+            display_name: `${shipping.zone} shipping`,
+          },
+        },
+      ],
+      success_url: absoluteUrl(`/orders/${orderId}?session_id={CHECKOUT_SESSION_ID}`),
+      cancel_url: absoluteUrl("/cart"),
+      payment_intent_data: {
+        // Stored on the PaymentIntent so the webhook can correlate back without
+        // a Stripe → Supabase query roundtrip.
+        metadata: { order_id: orderId },
+      },
+      metadata: { order_id: orderId },
+    });
+  } catch (e) {
+    // Never let a Stripe rejection bubble up as an opaque "Server Components
+    // render" digest — log the real reason (visible in Cloudflare logs) and
+    // hand the shopper a concrete message.
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("stripe.checkout.sessions.create failed:", message);
+    return { error: `Payment provider error: ${message}` };
+  }
 
   // Save the Stripe session id for reconciliation.
   await sb
@@ -169,4 +185,17 @@ export async function createCheckoutSession(
     .eq("id", orderId);
 
   return { url: session.url ?? undefined };
+}
+
+// Returns the URL only if it's a well-formed absolute http(s) URL — the form
+// Stripe accepts for `product_data.images`. Anything else returns null so the
+// image is simply omitted rather than failing the whole checkout session.
+function safeImageUrl(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    return u.protocol === "http:" || u.protocol === "https:" ? url : null;
+  } catch {
+    return null;
+  }
 }
