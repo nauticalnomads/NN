@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/service";
-import { autoFulfilOrder } from "@/lib/fulfilment";
-import { sendOrderConfirmation, sendRefundUpdate } from "@/lib/email";
+import { markOrderPaid } from "@/lib/orders";
+import { sendRefundUpdate } from "@/lib/email";
 import { notifyOwner } from "@/lib/notifications";
 
 // Trust the WEBHOOK, not the redirect — Stripe Checkout's success_url can be
@@ -46,19 +46,9 @@ export async function POST(request: Request) {
         const s = event.data.object as Stripe.Checkout.Session;
         const orderId = s.metadata?.order_id;
         if (!orderId) break;
-        await sb
-          .from("orders")
-          .update({
-            status: "paid",
-            placed_at: new Date().toISOString(),
-            stripe_payment_intent_id:
-              typeof s.payment_intent === "string" ? s.payment_intent : null,
-          } as never)
-          .eq("id", orderId)
-          .neq("status", "paid"); // idempotency: don't downgrade
-        // Fire-and-forget: confirmation email + auto-fulfilment trigger.
-        sendOrderConfirmation(orderId).catch((e) => console.error("confirmation email:", e));
-        autoFulfilOrder(orderId).catch((e) => console.error("auto-fulfil:", e));
+        const pi = typeof s.payment_intent === "string" ? s.payment_intent : null;
+        // Shared with the order-page fallback; idempotent + fires side effects.
+        await markOrderPaid(orderId, pi);
         break;
       }
       case "charge.refunded": {

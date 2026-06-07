@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Container } from "@/components/Container";
 import { createServiceClient } from "@/lib/supabase/service";
+import { confirmOrderFromSession } from "@/lib/orders";
 import { formatPrice } from "@/lib/format";
 import { ClearCart } from "./ClearCart";
 import { RequestRefund } from "./RequestRefund";
@@ -21,17 +22,35 @@ type OrderRow = {
   created_at: string;
 };
 
-export default async function OrderPage({ params }: { params: Promise<{ order: string }> }) {
+export default async function OrderPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ order: string }>;
+  searchParams: Promise<{ session_id?: string }>;
+}) {
   const { order } = await params;
+  const { session_id } = await searchParams;
   let row: OrderRow | null = null;
   try {
     const sb = createServiceClient();
-    const { data } = await sb
-      .from("orders")
-      .select("id, email, status, grand_total, currency, created_at")
-      .eq("id", order)
-      .maybeSingle();
+    const read = () =>
+      sb
+        .from("orders")
+        .select("id, email, status, grand_total, currency, created_at")
+        .eq("id", order)
+        .maybeSingle();
+    const { data } = await read();
     row = data as unknown as OrderRow | null;
+
+    // Fallback confirmation: the webhook is the primary path, but if it's slow
+    // or not yet configured, verify the Stripe session on return and flip the
+    // order to paid. Idempotent and gated by the session's order_id.
+    if (row && row.status !== "paid" && session_id) {
+      await confirmOrderFromSession(order, session_id);
+      const { data: fresh } = await read();
+      if (fresh) row = fresh as unknown as OrderRow;
+    }
   } catch {
     // Storefront is OK without Supabase; show 404.
   }
