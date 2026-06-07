@@ -5,7 +5,11 @@ let cached: Stripe | null = null;
 export function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) throw new Error("Missing STRIPE_SECRET_KEY");
-  // Pin to the SDK's bundled version so node-stripe types stay in lockstep.
-  if (!cached) cached = new Stripe(key);
+  if (!cached) {
+    // We run on Cloudflare Workers (OpenNext), which has no Node http stack, so
+    // the SDK's default transport fails with "An error occurred with our
+    // connection to Stripe". Route requests through the platform fetch instead.
+    cached = new Stripe(key, { httpClient: Stripe.createFetchHttpClient() });
+  }
   return cached;
 }

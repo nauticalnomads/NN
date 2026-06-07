@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type Stripe from "stripe";
+import Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/service";
 import { autoFulfilOrder } from "@/lib/fulfilment";
@@ -22,7 +22,15 @@ export async function POST(request: Request) {
   const stripe = getStripe();
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(raw, sig, secret);
+    // On Workers, signature verification must use the async SubtleCrypto path —
+    // the synchronous constructEvent relies on Node's crypto and throws here.
+    event = await stripe.webhooks.constructEventAsync(
+      raw,
+      sig,
+      secret,
+      undefined,
+      Stripe.createSubtleCryptoProvider(),
+    );
   } catch (err) {
     return NextResponse.json(
       { error: `signature: ${err instanceof Error ? err.message : "invalid"}` },
