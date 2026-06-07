@@ -252,6 +252,14 @@ export interface AuditLogRow {
   created_at: string;
 }
 
+export interface EmailTemplateRow {
+  key: string;
+  subject: string | null;
+  heading: string | null;
+  body: string | null;
+  updated_at: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -273,6 +281,7 @@ export interface Database {
       notifications: Table<NotificationRow, "type" | "title">;
       email_suppressions: Table<EmailSuppressionRow, "email">;
       audit_log: Table<AuditLogRow, "action">;
+      email_templates: Table<EmailTemplateRow, "key">;
     };
     Views: Record<never, never>;
     Functions: {
