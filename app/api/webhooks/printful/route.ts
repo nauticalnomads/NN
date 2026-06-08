@@ -4,6 +4,7 @@ import { sendShippingConfirmation } from "@/lib/email";
 import { resolveStoreId } from "@/lib/printful";
 import { importPrintfulProduct } from "@/lib/printful-import";
 import { getIntegrationConfig } from "@/lib/integrations";
+import { tokenAuthorized } from "@/lib/webhook-auth";
 
 // Printful webhook (configure in Printful → Settings → Webhooks).
 // - package_shipped → update order tracking + email the customer.
@@ -12,7 +13,8 @@ export async function POST(request: NextRequest) {
   const secret = (await getIntegrationConfig()).printful.webhookSecret;
   const provided =
     request.headers.get("x-pf-webhook-token") || request.nextUrl.searchParams.get("token");
-  if (secret && provided !== secret) {
+  // Fail closed: an unset secret rejects everything (set PRINTFUL_WEBHOOK_SECRET).
+  if (!tokenAuthorized(secret, provided)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

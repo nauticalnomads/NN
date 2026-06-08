@@ -137,10 +137,13 @@ export async function autoFulfilOrder(orderId: string) {
   const s = await settings();
 
   if (!s?.auto_fulfilment_enabled) {
+    // Guard: only a freshly-paid order queues; never downgrade a shipped/
+    // delivered/refunded order if this runs late or twice.
     await sb
       .from("orders")
       .update({ status: "awaiting_fulfilment" } as never)
-      .eq("id", orderId);
+      .eq("id", orderId)
+      .eq("status", "paid");
     return { skipped: "kill-switch" };
   }
 
@@ -160,10 +163,13 @@ export async function autoFulfilOrder(orderId: string) {
     .eq("order_id", orderId);
   const items = (itemsData as unknown as OrderItem[]) ?? [];
 
+  // Mark in-flight. Guard against stomping a terminal status (a fast POD
+  // shipped-webhook, or a re-run) — only advance from a pre-fulfilment state.
   await sb
     .from("orders")
     .update({ status: "fulfilling" } as never)
-    .eq("id", orderId);
+    .eq("id", orderId)
+    .in("status", ["paid", "awaiting_fulfilment", "fulfilment_failed"]);
 
   // Group by provider.
   const byProvider = new Map<string, OrderItem[]>();
@@ -235,7 +241,8 @@ export async function autoFulfilOrder(orderId: string) {
 
   const allOk = results.every((r) => r.ok);
 
-  // Update order with per-provider refs + status.
+  // Update order with per-provider refs + status. Guard the status write so a
+  // POD shipped/delivered webhook that landed mid-fulfilment isn't downgraded.
   await sb
     .from("orders")
     .update({
@@ -246,7 +253,8 @@ export async function autoFulfilOrder(orderId: string) {
         status: r.ok ? "placed" : "failed",
       })),
     } as never)
-    .eq("id", orderId);
+    .eq("id", orderId)
+    .in("status", ["fulfilling", "paid", "awaiting_fulfilment", "fulfilment_failed"]);
 
   if (!allOk) {
     const detail = `Order ${orderId}: ${results

@@ -23,20 +23,29 @@ export async function createCheckoutSession(
     return { error: "Payments are not configured yet (STRIPE_SECRET_KEY missing)." };
   }
 
-  const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0);
   const sb = createServiceClient();
-  // Enrich cart lines with provider mapping for live shipping + fulfilment.
-  // `provider` + `provider_product_id` live on the products table; per-variant
-  // `provider_variant_id` lives on variants. One join, one round-trip.
+  // Enrich cart lines with provider mapping (for shipping + fulfilment) AND the
+  // authoritative price/currency. Money is NEVER trusted from the client cart —
+  // a tampered client could otherwise set any price. `provider`/`price`/
+  // `currency` live on products; per-variant `price`/`provider_variant_id` live
+  // on variants. One join, one round-trip.
   const variantIds = items.map((i) => i.variantId);
   const { data: variantRows } = await sb
     .from("variants")
-    .select("id, provider_variant_id, products(provider, provider_product_id)")
+    .select(
+      "id, price, provider_variant_id, products(provider, provider_product_id, price, currency)",
+    )
     .in("id", variantIds);
   type V = {
     id: string;
+    price: number | null;
     provider_variant_id: string | null;
-    products: { provider: CartLine["provider"]; provider_product_id: string | null } | null;
+    products: {
+      provider: CartLine["provider"];
+      provider_product_id: string | null;
+      price: number | null;
+      currency: string | null;
+    } | null;
   };
   const byId = new Map<string, V>(((variantRows as unknown as V[]) ?? []).map((v) => [v.id, v]));
   const enrich = (variantId: string) => {
@@ -47,13 +56,40 @@ export async function createCheckoutSession(
       provider_variant_id: v?.provider_variant_id ?? null,
     };
   };
+  // Server-authoritative unit price (variant overrides product) + currency.
+  const priced = (variantId: string): { price: number; currency: string } | null => {
+    const v = byId.get(variantId);
+    if (!v) return null;
+    const price = v.price ?? v.products?.price ?? null;
+    if (price == null || !Number.isFinite(Number(price))) return null;
+    return { price: Number(price), currency: (v.products?.currency ?? "GBP").toUpperCase() };
+  };
+
+  // Every cart item must still exist + be priced, and the whole cart must be a
+  // single currency (Stripe sessions + our totals are single-currency).
+  const serverLines: { item: CartItem; price: number; currency: string }[] = [];
+  for (const i of items) {
+    const p = priced(i.variantId);
+    if (!p) return { error: "An item in your bag is no longer available. Please review your bag." };
+    serverLines.push({ item: i, price: p.price, currency: p.currency });
+  }
+  const currencies = new Set(serverLines.map((l) => l.currency));
+  if (currencies.size > 1) {
+    return { error: "Your bag mixes currencies. Please check out those items separately." };
+  }
+  const currencyUpper = serverLines[0].currency;
+  const currency = currencyUpper.toLowerCase();
+  const subtotal = serverLines.reduce((s, l) => s + l.price * l.item.quantity, 0);
+  // variantId → server unit price, for the snapshot + Stripe line items.
+  const priceByVariant = new Map(serverLines.map((l) => [l.item.variantId, l.price]));
+  const unitPrice = (variantId: string) => priceByVariant.get(variantId) ?? 0;
+
   const cartLines: CartLine[] = items.map((i) => ({
     ...enrich(i.variantId),
     quantity: i.quantity,
   }));
 
   const shipping = await quoteShipping(cartLines, shipping_address);
-  const currency = (items[0]?.currency || "GBP").toLowerCase();
   // Link to the signed-in customer if there is one (guest checkout otherwise).
   const customer = await getCustomer();
   const orderRow = {
@@ -96,9 +132,9 @@ export async function createCheckoutSession(
       provider: e.provider,
       provider_product_id: e.provider_product_id,
       provider_variant_id: e.provider_variant_id,
-      unit_price: i.price,
+      unit_price: unitPrice(i.variantId),
       quantity: i.quantity,
-      currency: i.currency,
+      currency: currencyUpper,
     };
   });
   await sb.from("order_items").insert(itemRows as never);
@@ -114,7 +150,7 @@ export async function createCheckoutSession(
       quantity: i.quantity,
       price_data: {
         currency,
-        unit_amount: Math.round(i.price * 100),
+        unit_amount: Math.round(unitPrice(i.variantId) * 100),
         product_data: {
           name: i.variantTitle ? `${i.title} — ${i.variantTitle}` : i.title,
           ...(image ? { images: [image] } : {}),

@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/service";
 import { autoFulfilOrder } from "@/lib/fulfilment";
@@ -28,9 +29,20 @@ export async function markOrderPaid(
   const transitioned = Array.isArray(data) && data.length > 0;
   if (!transitioned) return false;
 
-  // Fire-and-forget: confirmation email + auto-fulfilment trigger.
-  sendOrderConfirmation(orderId).catch((e) => console.error("confirmation email:", e));
-  autoFulfilOrder(orderId).catch((e) => console.error("auto-fulfil:", e));
+  // Run the one-time side effects (receipt email + auto-fulfilment) AFTER the
+  // response is sent, via `after()` → the Workers waitUntil keeps the isolate
+  // alive until they settle. Plain fire-and-forget can be killed mid-flight on
+  // Workers, dropping emails/fulfilment. `after` outside a request scope throws,
+  // so fall back to a detached run (e.g. scripts/tests).
+  const runSideEffects = async () => {
+    await sendOrderConfirmation(orderId).catch((e) => console.error("confirmation email:", e));
+    await autoFulfilOrder(orderId).catch((e) => console.error("auto-fulfil:", e));
+  };
+  try {
+    after(runSideEffects);
+  } catch {
+    void runSideEffects();
+  }
   return true;
 }
 
