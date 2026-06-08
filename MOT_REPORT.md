@@ -11,6 +11,7 @@ Method: four parallel read-only deep audits (storefront/SEO/a11y · commerce/pay
 **Overall: architecturally solid, well-layered, and close to launch — but not launch-ready yet.** The codebase is consistently structured, role-gated, RLS-enforced, and degrades gracefully almost everywhere. The blockers are a small, fixable set of (1) security defaults that **fail open**, (2) **money-trust** issues in checkout/refunds, and (3) Workers-runtime reliability gaps.
 
 What's genuinely good (verified, no action needed):
+
 - Service-role Supabase client is never imported into client code; admin pages + actions all call role guards; RLS denies anon on every sensitive table.
 - Customer↔admin privilege separation holds at the DB policy layer (a customer cannot become an admin).
 - The Stripe-on-Workers fixes from this session (fetch HTTP client + async SubtleCrypto webhook verify + session-verify fallback) are correct and deployed.
@@ -28,61 +29,66 @@ Mapped against the `RUNBOOK.md` pre-launch checklist (the de-facto acceptance cr
 Legend: ✅ done · 🟡 partial / needs verification · ⚠️ built but has a bug/risk (see §C) · ⬜ missing
 
 ### Storefront & content
-| Item | Status | Notes |
-|---|---|---|
-| Home, /shop, /collections, /products, static pages render | ✅ | All routes build & SSR with guarded fetches |
-| Dynamic mega-menu from published collections | ✅ | `lib/nav-data.ts`, cached tag `nav` |
-| Homepage CMS (hero/carousel/banner/tiles/strip) | ✅ | `/admin/content` |
-| PLP + product card + client filters + NEW badge | ✅ | |
-| Wishlist (guest localStorage + merge) | ✅ | `wishlists` table + API (REDESIGN listed it ⬜; later built) |
-| Newsletter (Resend + Supabase) | ✅ | |
-| Static/legal pages (shipping, returns, privacy, terms, cookies…) | ✅ | ⚠️ duplicate shipping/returns pages (SEO, §D) |
-| 404 branded page | ✅ | |
-| Lighthouse perf/a11y pass | 🟡 | Never run in-browser; a11y gaps found (§C-9) |
-| Image alt text on products | 🟡 | Auto alt-text exists; not audited across catalogue |
+
+| Item                                                             | Status | Notes                                                        |
+| ---------------------------------------------------------------- | ------ | ------------------------------------------------------------ |
+| Home, /shop, /collections, /products, static pages render        | ✅     | All routes build & SSR with guarded fetches                  |
+| Dynamic mega-menu from published collections                     | ✅     | `lib/nav-data.ts`, cached tag `nav`                          |
+| Homepage CMS (hero/carousel/banner/tiles/strip)                  | ✅     | `/admin/content`                                             |
+| PLP + product card + client filters + NEW badge                  | ✅     |                                                              |
+| Wishlist (guest localStorage + merge)                            | ✅     | `wishlists` table + API (REDESIGN listed it ⬜; later built) |
+| Newsletter (Resend + Supabase)                                   | ✅     |                                                              |
+| Static/legal pages (shipping, returns, privacy, terms, cookies…) | ✅     | ⚠️ duplicate shipping/returns pages (SEO, §D)                |
+| 404 branded page                                                 | ✅     |                                                              |
+| Lighthouse perf/a11y pass                                        | 🟡     | Never run in-browser; a11y gaps found (§C-9)                 |
+| Image alt text on products                                       | 🟡     | Auto alt-text exists; not audited across catalogue           |
 
 ### Cart, checkout, payments
-| Item | Status | Notes |
-|---|---|---|
-| Add-to-bag, mini-cart, /cart qty/remove/subtotal | ✅ | |
-| /checkout collects email+address, Stripe redirect | ✅ | Fixed this session (was crashing) |
-| Order created `pending` → webhook flips `paid` | ⚠️ | Works, but webhook + side-effects have durability/idempotency gaps (§C-3,4) |
-| Order confirmation email | 🟡 | Sends from webhook/fallback; **requires `RESEND_API_KEY` + webhook configured** |
-| Live-mode purchase end-to-end | ⬜ | Still test mode; not yet run live |
-| Server-side price validation | ⚠️ | **Trusts client cart prices/currency** (§C-2) |
+
+| Item                                              | Status | Notes                                                                           |
+| ------------------------------------------------- | ------ | ------------------------------------------------------------------------------- |
+| Add-to-bag, mini-cart, /cart qty/remove/subtotal  | ✅     |                                                                                 |
+| /checkout collects email+address, Stripe redirect | ✅     | Fixed this session (was crashing)                                               |
+| Order created `pending` → webhook flips `paid`    | ⚠️     | Works, but webhook + side-effects have durability/idempotency gaps (§C-3,4)     |
+| Order confirmation email                          | 🟡     | Sends from webhook/fallback; **requires `RESEND_API_KEY` + webhook configured** |
+| Live-mode purchase end-to-end                     | ⬜     | Still test mode; not yet run live                                               |
+| Server-side price validation                      | ⚠️     | **Trusts client cart prices/currency** (§C-2)                                   |
 
 ### Shipping, orders, fulfilment
-| Item | Status | Notes |
-|---|---|---|
-| Live POD quotes (Printful + Printify) + flat fallback | ✅ | |
-| Admin shipping mode toggle + flat zones | ✅ | |
-| /admin/orders + detail + retry + manual fallback | ✅ | |
-| Auto-fulfilment + kill-switch + dry-run | ✅ | `fulfilment_dry_run` still ON (safe) |
-| Tracking webhook → order + shipping email | ⚠️ | Works but **fails open** when secret unset (§C-1); address used is client-form not Stripe-collected (§D) |
+
+| Item                                                  | Status | Notes                                                                                                    |
+| ----------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------- |
+| Live POD quotes (Printful + Printify) + flat fallback | ✅     |                                                                                                          |
+| Admin shipping mode toggle + flat zones               | ✅     |                                                                                                          |
+| /admin/orders + detail + retry + manual fallback      | ✅     |                                                                                                          |
+| Auto-fulfilment + kill-switch + dry-run               | ✅     | `fulfilment_dry_run` still ON (safe)                                                                     |
+| Tracking webhook → order + shipping email             | ⚠️     | Works but **fails open** when secret unset (§C-1); address used is client-form not Stripe-collected (§D) |
 
 ### Refunds, roles, financial
-| Item | Status | Notes |
-|---|---|---|
-| Customer refund request (guest + account) | ✅ | Account path RLS-scoped; guest path is UUID-bearer (§D) |
-| Admin Stripe refund issue | ⚠️ | No idempotency key → double-issue risk (§C-3) |
-| Refund webhook reconciliation | ⚠️ | `charge.refunded` reads un-expanded list; matches wrong row (§C-3) |
-| Roles enforced server-side (master/regular/content) | ✅ | |
-| Invite / set role / deactivate | ⚠️ | No "last master" lockout guard (§D) |
-| Financial dashboard + CSV + PDF + disclaimer | ✅ | ⚠️ cross-currency sum (§D) |
+
+| Item                                                | Status | Notes                                                              |
+| --------------------------------------------------- | ------ | ------------------------------------------------------------------ |
+| Customer refund request (guest + account)           | ✅     | Account path RLS-scoped; guest path is UUID-bearer (§D)            |
+| Admin Stripe refund issue                           | ⚠️     | No idempotency key → double-issue risk (§C-3)                      |
+| Refund webhook reconciliation                       | ⚠️     | `charge.refunded` reads un-expanded list; matches wrong row (§C-3) |
+| Roles enforced server-side (master/regular/content) | ✅     |                                                                    |
+| Invite / set role / deactivate                      | ⚠️     | No "last master" lockout guard (§D)                                |
+| Financial dashboard + CSV + PDF + disclaimer        | ✅     | ⚠️ cross-currency sum (§D)                                         |
 
 ### Email, social, blog, SEO
-| Item | Status | Notes |
-|---|---|---|
-| Email journeys (order/ship/refund/welcome/abandoned/owner) | ✅ | + **editable templates** added this session |
-| Abandoned-cart cron | ⚠️ | Wired, but **fails open** without `CRON_SECRET` (§C-1) |
-| Owner alerts (fulfilment_failed/refund/dispute) | ✅ | |
-| Google Drive listing + caption gen | ⚠️ | **Drive JWT signing uses node:crypto → throws on Workers** (§C-7) |
-| Make.com webhook publish | ⬜ | Env documented but **no consumer in code** (descoped?) |
-| Blog auto-queue (new + on-sale) + manual URL draft | ✅ | |
-| Journal renders + markdown | ✅ | |
-| sitemap.xml / robots.txt (indexing-gated) | ✅ | sitemap missing some legal pages (§D) |
-| Product/Org/Breadcrumb JSON-LD | ⚠️ | Product LD can emit `NaN`/invalid offers (§C-8) |
-| OG / Twitter cards | ⚠️ | **No default OG image, no favicon** (§C-8) |
+
+| Item                                                       | Status | Notes                                                             |
+| ---------------------------------------------------------- | ------ | ----------------------------------------------------------------- |
+| Email journeys (order/ship/refund/welcome/abandoned/owner) | ✅     | + **editable templates** added this session                       |
+| Abandoned-cart cron                                        | ⚠️     | Wired, but **fails open** without `CRON_SECRET` (§C-1)            |
+| Owner alerts (fulfilment_failed/refund/dispute)            | ✅     |                                                                   |
+| Google Drive listing + caption gen                         | ⚠️     | **Drive JWT signing uses node:crypto → throws on Workers** (§C-7) |
+| Make.com webhook publish                                   | ⬜     | Env documented but **no consumer in code** (descoped?)            |
+| Blog auto-queue (new + on-sale) + manual URL draft         | ✅     |                                                                   |
+| Journal renders + markdown                                 | ✅     |                                                                   |
+| sitemap.xml / robots.txt (indexing-gated)                  | ✅     | sitemap missing some legal pages (§D)                             |
+| Product/Org/Breadcrumb JSON-LD                             | ⚠️     | Product LD can emit `NaN`/invalid offers (§C-8)                   |
+| OG / Twitter cards                                         | ⚠️     | **No default OG image, no favicon** (§C-8)                        |
 
 ---
 
@@ -110,7 +116,7 @@ Legend: ✅ done · 🟡 partial / needs verification · ⚠️ built but has a 
 
 **C-5 — Hardcoded Supabase URL + anon JWT + Stripe publishable key committed as fallbacks.** `next.config.mjs:14-21`. If Worker env is ever unset the app silently uses these; they're in git history. **Fix:** empty/placeholder fallbacks, require real env, rotate the committed anon key.
 
-**C-6 — `email_templates` table has no migration file.** Created only as a copy-paste snippet in the admin UI (`app/admin/emails/page.tsx`). Reads fall back to code defaults (fine), but **saving** an override throws until the owner runs the SQL. *(This was introduced this session — should ship as a real migration.)* **Fix:** add `supabase/migrations/…_email_templates.sql`.
+**C-6 — `email_templates` table has no migration file.** Created only as a copy-paste snippet in the admin UI (`app/admin/emails/page.tsx`). Reads fall back to code defaults (fine), but **saving** an override throws until the owner runs the SQL. _(This was introduced this session — should ship as a real migration.)_ **Fix:** add `supabase/migrations/…_email_templates.sql`.
 
 **C-7 — Google Drive feature throws on Workers.** `lib/google-drive.ts:39-42` signs the service-account JWT with Node's `crypto.createSign("RSA-SHA256")`, unavailable on `workerd`. The social Drive-image listing/caption feature errors at runtime. **Fix:** re-implement signing with `crypto.subtle` (RSASSA-PKCS1-v1_5/SHA-256), mirroring the Stripe SubtleCrypto path; replace `Buffer` base64url with `btoa`/`Uint8Array`.
 
@@ -130,13 +136,14 @@ Mega-menu opens on `onMouseEnter` only (`components/Header.tsx:170-185`) — key
 - **C-13 — Nav can be stale up to 5 min after publishing a product.** Visibility depends on a collection having ≥1 published product, but `app/admin/products/actions.ts` never calls `revalidateTag("nav")`. **Fix:** add it to product publish/unpublish/status changes.
 - **C-14 — `PRINTFUL_STORE_ID` read but undocumented** in `.env.example`; multi-store Printful accounts get confusing quote/fulfilment failures. **Fix:** document it.
 - **C-15 — User management self-lockout.** `app/admin/users/actions.ts` lets a master demote/deactivate the last master, and `role` isn't allow-list validated. **Fix:** block last-master demotion/deactivation; validate role ∈ {master,regular,content}.
-- **C-16 — POD webhook secret rendered as plaintext** in `/admin/settings` HTML (`page.tsx:17-21,181`). Ops-only, but should be reveal-on-click like the API-key fields. 
+- **C-16 — POD webhook secret rendered as plaintext** in `/admin/settings` HTML (`page.tsx:17-21,181`). Ops-only, but should be reveal-on-click like the API-key fields.
 - **C-17 — Guest order page / refund action**: reads any order by UUID via the service client and renders the email; `requestRefund` is unauthenticated + unthrottled (an order/email confirmation oracle). UUIDs bound the risk. **Fix:** prefer the authed path, rate-limit, reduce email exposure.
 - **C-18 — Duplicate shipping/returns pages** (`/shipping-returns`, `/shipping`, `/returns`) = duplicate-content SEO dilution. **Fix:** one canonical + 301 the others (redirect infra already exists).
 - **C-19 — Sitemap omits indexable legal/info pages** (`app/sitemap.ts:16-24`): sustainability, privacy, cookies, terms, shipping, returns, etc. **Fix:** add them.
 - **C-20 — `quoteShipping` module-scope cache is unbounded + cross-request** on a warm isolate (`lib/shipping.ts:140`) → can serve a stale quote and grow forever. **Fix:** request-scope it or add TTL+cap.
 
 ### 🟢 Low / Nits
+
 - Financial summary sums Stripe balance transactions across currencies into one number (`lib/financial.ts`) — latent bug for any non-GBP sale; group by currency.
 - Mega-menu uses raw `<img>` (`components/Header.tsx:230`) — use `next/image`.
 - Abandoned-cart marker is stashed inside `shipping_quote` JSON — prefer a dedicated column.
@@ -155,7 +162,7 @@ Mega-menu opens on `onMouseEnter` only (`components/Header.tsx:170-185`) — key
 - **Observability:** no error monitoring/analytics. Add Sentry (or Cloudflare Workers logs + a logpush) and a privacy-friendly analytics tag; wire an uptime check on `/api/health`. This also closes out the recurring "Digest" homepage-error mystery from earlier.
 - **Durable fulfilment:** move POD order placement to a Cloudflare Queue / cron re-drive so payment confirmation never depends on in-request retries (ties into C-4).
 - **Partial refunds:** model partial/over-refund and clamp the refund amount to the PI's captured amount (shipping often non-recoverable on POD).
-- **Migrations runbook:** produce an authoritative "apply these N migrations in order" checklist and verify all are applied; the `select("*")`/try-catch guards currently *hide* "owner forgot the SQL" as silent empty states (e.g. nav vanishing).
+- **Migrations runbook:** produce an authoritative "apply these N migrations in order" checklist and verify all are applied; the `select("*")`/try-catch guards currently _hide_ "owner forgot the SQL" as silent empty states (e.g. nav vanishing).
 - **Performance:** once C-10 is resolved, statically render the marketing shell; use `estimated` counts on /shop; lazy-load below-the-fold imagery.
 - **Bump `wrangler` `compatibility_date`** (currently 2025-03-01) for better `nodejs_compat` coverage (helps C-7), and test.
 - **Clean `.env.example`:** add `PRINTFUL_STORE_ID`, document `SHOPIFY_ADMIN_TOKEN`, remove the unused `MAKE_WEBHOOK_URL` (or implement its consumer).
@@ -176,7 +183,7 @@ Mega-menu opens on `onMouseEnter` only (`components/Header.tsx:170-185`) — key
 
 ## F. Recommended fix order
 
-1. **Security defaults — fail closed** (C-1) + require the launch secrets. *(small, high impact)*
+1. **Security defaults — fail closed** (C-1) + require the launch secrets. _(small, high impact)_
 2. **Money trust** — server-side prices + single-currency guard (C-2); refund reconciliation + idempotency key (C-3).
 3. **Durability** — await/`waitUntil` paid-order side-effects; move fulfilment off the request path (C-4).
 4. **Ship `email_templates` migration** (C-6) and the migrations-applied checklist.
