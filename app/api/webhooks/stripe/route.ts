@@ -71,55 +71,69 @@ export async function POST(request: Request) {
         } | null;
         if (!ord) break;
 
-        // Collect the Stripe refund objects on this charge.
-        const stripeRefunds = (charge.refunds?.data ?? []) as Stripe.Refund[];
-        for (const sr of stripeRefunds) {
+        // The `charge.refunds` sublist is NOT reliably expanded on the webhook
+        // payload, so fetch the refunds explicitly rather than trusting inline data.
+        const refundList = await stripe.refunds.list({ charge: charge.id, limit: 100 });
+        for (const sr of refundList.data) {
           if (sr.status !== "succeeded") continue;
-          const amountGbp = sr.amount / 100;
-          // Find an open local refund for this order that we haven't reconciled yet.
-          const { data: localRefund } = await sb
+          const amount = sr.amount / 100;
+
+          // 1) Already reconciled this exact Stripe refund? Idempotent no-op.
+          const { data: byStripeId } = await sb
             .from("refunds")
-            .select("id, status, amount, currency")
-            .eq("order_id", ord.id)
-            .not("status", "in", '("completed","rejected")')
-            .order("created_at")
-            .limit(1)
+            .select("id, status")
+            .eq("stripe_refund_id", sr.id)
             .maybeSingle();
-          const lr = localRefund as unknown as {
-            id: string;
-            status: string;
-            amount: number;
-            currency: string;
-          } | null;
-          if (lr) {
+          const existing = byStripeId as unknown as { id: string; status: string } | null;
+          if (existing) {
+            if (existing.status !== "completed") {
+              await sb
+                .from("refunds")
+                .update({ status: "completed" } as never)
+                .eq("id", existing.id);
+              await sb
+                .from("orders")
+                .update({ status: "refunded" } as never)
+                .eq("id", ord.id);
+              sendRefundUpdate(ord.id, "completed", amount, sr.currency).catch(() => undefined);
+            }
+            continue;
+          }
+
+          // 2) Match an open local refund for this order BY AMOUNT (minor units),
+          // so a £10 Stripe refund can't complete a £50 request.
+          const { data: open } = await sb
+            .from("refunds")
+            .select("id, amount")
+            .eq("order_id", ord.id)
+            .is("stripe_refund_id", null)
+            .not("status", "in", '("completed","rejected")')
+            .order("created_at");
+          const match = ((open as unknown as { id: string; amount: number }[]) ?? []).find(
+            (r) => Math.round(r.amount * 100) === sr.amount,
+          );
+          if (match) {
             await sb
               .from("refunds")
-              .update({
-                status: "completed",
-                stripe_refund_id: sr.id,
-              } as never)
-              .eq("id", lr.id);
-            await sb
-              .from("orders")
-              .update({ status: "refunded" } as never)
-              .eq("id", ord.id);
-            sendRefundUpdate(ord.id, "completed", amountGbp, sr.currency).catch(() => undefined);
+              .update({ status: "completed", stripe_refund_id: sr.id } as never)
+              .eq("id", match.id);
           } else {
-            // No pending local row — refund was initiated in Stripe dashboard.
-            // Insert a reconciliation record so it's visible in admin.
+            // 3) No matching request — refund was issued in the Stripe dashboard.
+            // Insert a reconciliation row so it's visible in admin.
             await sb.from("refunds").insert({
               order_id: ord.id,
-              amount: amountGbp,
+              amount,
               currency: sr.currency,
               status: "completed",
               stripe_refund_id: sr.id,
               reason: "refund via stripe dashboard",
             } as never);
-            await sb
-              .from("orders")
-              .update({ status: "refunded" } as never)
-              .eq("id", ord.id);
           }
+          await sb
+            .from("orders")
+            .update({ status: "refunded" } as never)
+            .eq("id", ord.id);
+          sendRefundUpdate(ord.id, "completed", amount, sr.currency).catch(() => undefined);
         }
         break;
       }

@@ -28,6 +28,20 @@ export async function issueRefund(formData: FormData) {
   } | null;
   if (!refund || refund.status !== "requested") return;
 
+  // Atomically claim the row (requested → processing) BEFORE calling Stripe, so
+  // a double-click or a second admin can't both pass the status check and
+  // double-issue the refund. Only the caller that flips it proceeds.
+  const { data: claimed } = await sb
+    .from("refunds")
+    .update({ status: "processing" } as never)
+    .eq("id", refundId)
+    .eq("status", "requested")
+    .select("id");
+  if (!claimed || (claimed as unknown[]).length === 0) {
+    revalidatePath("/admin/refunds");
+    return;
+  }
+
   const { data: orderData } = await sb
     .from("orders")
     .select("stripe_payment_intent_id")
@@ -44,11 +58,16 @@ export async function issueRefund(formData: FormData) {
 
   try {
     const stripe = getStripe();
-    const r = await stripe.refunds.create({
-      payment_intent: order.stripe_payment_intent_id,
-      amount: Math.round(refund.amount * 100),
-      metadata: { order_id: refund.order_id, refund_id: refund.id },
-    });
+    const r = await stripe.refunds.create(
+      {
+        payment_intent: order.stripe_payment_intent_id,
+        amount: Math.round(refund.amount * 100),
+        metadata: { order_id: refund.order_id, refund_id: refund.id },
+      },
+      // Idempotency key keyed to our refund row — a retried request reuses the
+      // same Stripe refund instead of creating a second one.
+      { idempotencyKey: `refund_${refund.id}` },
+    );
     await sb
       .from("refunds")
       .update({

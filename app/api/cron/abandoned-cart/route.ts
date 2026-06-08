@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendAbandonedCart } from "@/lib/email";
+import { tokenAuthorized } from "@/lib/webhook-auth";
 
 // Scheduled by Cloudflare Cron Trigger (or hit manually with the secret token).
 // Finds orders that are still 'pending' 1-3h after creation, has an email but
@@ -11,8 +12,9 @@ import { sendAbandonedCart } from "@/lib/email";
 // Or any external cron hitting:
 //   POST /api/cron/abandoned-cart  with header X-NN-Cron-Secret matching env.
 export async function POST(request: NextRequest) {
+  // Fail closed: an unset CRON_SECRET rejects everything (set it in Cloudflare).
   const expected = process.env.CRON_SECRET;
-  if (expected && request.headers.get("x-nn-cron-secret") !== expected) {
+  if (!tokenAuthorized(expected, request.headers.get("x-nn-cron-secret"))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const sb = createServiceClient();
