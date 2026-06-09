@@ -1,11 +1,36 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
-// Refreshes the Supabase auth cookie on every request that hits /admin and
-// gates the section: any unauthenticated request to /admin is redirected to
-// /login. Role-based access (master vs regular vs content) is enforced at the
-// route/action layer in app/admin (lib/auth.ts), backed by RLS in the DB.
+// Canonical host. www.* and the legacy hyphenated domain 301→ the apex.
+const CANONICAL_HOST = "nauticalnomads.com";
+const REDIRECT_HOSTS = new Set([
+  `www.${CANONICAL_HOST}`,
+  "nautical-nomads.com",
+  "www.nautical-nomads.com",
+]);
+
+// Runs site-wide for the canonical-host redirect; the Supabase auth refresh +
+// section gating only runs for /admin, /login, /account, /auth (so we don't add
+// an auth round-trip to every storefront page). Role-based access is enforced
+// at the route/action layer (lib/auth.ts) + RLS.
 export async function middleware(request: NextRequest) {
+  const host = request.nextUrl.host.toLowerCase();
+  if (REDIRECT_HOSTS.has(host)) {
+    const target = request.nextUrl.clone();
+    target.host = CANONICAL_HOST;
+    target.protocol = "https";
+    target.port = "";
+    return NextResponse.redirect(target, 308);
+  }
+
+  const path = request.nextUrl.pathname;
+  const needsAuth =
+    path.startsWith("/admin") ||
+    path === "/login" ||
+    path.startsWith("/account") ||
+    path.startsWith("/auth");
+  if (!needsAuth) return NextResponse.next({ request });
+
   const response = NextResponse.next({ request });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -30,8 +55,6 @@ export async function middleware(request: NextRequest) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-
-    const path = request.nextUrl.pathname;
 
     if (path.startsWith("/admin") && !user) {
       const redirectUrl = request.nextUrl.clone();
@@ -70,5 +93,8 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/login", "/account/:path*", "/auth/:path*"],
+  // Run everywhere except Next internals + files with an extension, so the
+  // canonical-host redirect applies site-wide. Auth work inside is still scoped
+  // to /admin, /login, /account, /auth.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.[\\w]+$).*)"],
 };
