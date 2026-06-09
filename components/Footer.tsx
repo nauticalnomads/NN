@@ -24,7 +24,7 @@ const HELP_LINKS = [
   { label: "Order Status", href: "/account" },
   { label: "Shipping & Delivery", href: "/shipping" },
   { label: "Returns & Exchanges", href: "/returns" },
-  { label: "Payment Methods", href: "/help" },
+  { label: "Payment Methods", href: "/payment-methods" },
   { label: "FAQ & Contact", href: "/help" },
   { label: "Size Guide", href: "/size-guide" },
   { label: "Privacy & Data", href: "/privacy" },
@@ -32,14 +32,14 @@ const HELP_LINKS = [
 
 const BRAND_LINKS = [
   { label: "About Us", href: "/about" },
-  { label: "Our Story", href: "/about" },
+  { label: "Our Story", href: "/our-story" },
   { label: "Ambassadors", href: "/ambassadors" },
   { label: "Sustainability", href: "/sustainability" },
   { label: "Blog", href: "/journal" },
   { label: "Gift Cards", href: "/gift-cards" },
+  { label: "Student Discount", href: "/student-discount" },
+  { label: "Careers", href: "/careers" },
 ];
-
-const BRAND_PLACEHOLDERS = ["Student Discount", "Careers"];
 
 // ── social icons ─────────────────────────────────────────────────────────────
 const soc = "h-6 w-6";
@@ -190,17 +190,6 @@ export async function Footer() {
                   >
                     {l.label}
                   </Link>
-                </li>
-              ))}
-              {BRAND_PLACEHOLDERS.map((l) => (
-                <li key={l}>
-                  <span
-                    className="font-body text-[14px] text-hull-white/35"
-                    title="Coming soon"
-                    aria-disabled
-                  >
-                    {l}
-                  </span>
                 </li>
               ))}
             </ul>

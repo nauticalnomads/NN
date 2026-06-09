@@ -187,3 +187,21 @@ export async function sendNewsletterWelcome(email: string, code: string) {
     shop_url: absoluteUrl("/shop"),
   });
 }
+
+// ── GIFT CARD DELIVERY (to purchaser, after payment) ─────────────────────────
+export async function sendGiftCardCode(
+  to: string,
+  card: { code: string; amount: number; currency: string; expires_at: string },
+) {
+  const expiry = new Date(card.expires_at).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  return sendTemplate("gift_card_delivered", to, {
+    code: card.code,
+    amount: formatPrice(card.amount, card.currency),
+    expiry_date: expiry,
+    shop_url: absoluteUrl("/shop"),
+  });
+}

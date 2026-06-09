@@ -163,6 +163,10 @@ export async function autoFulfilOrder(orderId: string) {
     .eq("order_id", orderId);
   const items = (itemsData as unknown as OrderItem[]) ?? [];
 
+  // Nothing to fulfil (e.g. a gift-card purchase, or an all-unmapped order):
+  // leave the order `paid` rather than parking it in `fulfilling` forever.
+  if (!items.some((i) => i.provider)) return { skipped: "no-fulfillable-items" };
+
   // Mark in-flight. Guard against stomping a terminal status (a fast POD
   // shipped-webhook, or a re-run) — only advance from a pre-fulfilment state.
   await sb
@@ -183,7 +187,7 @@ export async function autoFulfilOrder(orderId: string) {
   const results: { provider: string; ok: boolean; providerOrderId?: string; error?: string }[] = [];
 
   for (const [provider, group] of byProvider) {
-    const idempotency_key = `${orderId}::${provider}`;
+    let idempotency_key = `${orderId}::${provider}`;
     // Idempotency: skip if a successful attempt already exists.
     const { data: existing } = await sb
       .from("fulfilment_attempts")
@@ -201,8 +205,10 @@ export async function autoFulfilOrder(orderId: string) {
 
     if (s.fulfilment_dry_run) {
       // No real provider call — record a synthetic attempt so the admin sees
-      // the dry-run pathway in the audit log.
+      // the dry-run pathway in the audit log. Use a non-colliding key so it
+      // never blocks a later LIVE run (flip dry_run off → re-fulfils for real).
       providerOrderId = `DRYRUN-${provider}-${orderId.slice(0, 8)}`;
+      idempotency_key = `${orderId}::${provider}::dryrun::${Date.now()}`;
     } else {
       // Retry loop — transient errors (5xx/429/network) get up to MAX_RETRIES
       // attempts with exponential backoff. Permanent 4xx errors fail immediately.

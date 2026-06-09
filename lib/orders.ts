@@ -3,6 +3,7 @@ import { getStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/service";
 import { autoFulfilOrder } from "@/lib/fulfilment";
 import { sendOrderConfirmation } from "@/lib/email";
+import { processGiftCardsForOrder } from "@/lib/gift-cards";
 
 // Idempotently flip an order to `paid` and fire the one-time side effects
 // (confirmation email + auto-fulfilment). Safe to call from BOTH the Stripe
@@ -36,6 +37,9 @@ export async function markOrderPaid(
   // so fall back to a detached run (e.g. scripts/tests).
   const runSideEffects = async () => {
     await sendOrderConfirmation(orderId).catch((e) => console.error("confirmation email:", e));
+    // Activate any gift cards bought in this order (+ email the code) and debit
+    // any gift-card balance redeemed against it. No-op for ordinary orders.
+    await processGiftCardsForOrder(orderId).catch((e) => console.error("gift cards:", e));
     await autoFulfilOrder(orderId).catch((e) => console.error("auto-fulfil:", e));
   };
   try {

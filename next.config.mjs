@@ -34,6 +34,8 @@ const nextConfig = {
       { protocol: "https", hostname: "files.cdn.printful.com" },
       { protocol: "https", hostname: "images-api.printify.com" },
       { protocol: "https", hostname: "cdn.shopify.com" },
+      // Curated stock covers for seeded journal drafts (swappable in admin).
+      { protocol: "https", hostname: "images.unsplash.com" },
     ],
   },
 };
