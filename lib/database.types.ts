@@ -163,6 +163,33 @@ export interface RefundRow extends Timestamps {
   actioned_by: string | null;
 }
 
+export type GiftCardStatus = "pending" | "active" | "redeemed" | "expired" | "void";
+export interface GiftCardRow extends Timestamps {
+  id: string;
+  code: string;
+  initial_amount: number;
+  balance: number;
+  currency: string;
+  status: GiftCardStatus;
+  purchaser_email: string | null;
+  order_id: string | null;
+  activated_at: string | null;
+  expires_at: string | null;
+  last_redeemed_at: string | null;
+}
+
+export type GiftCardRedemptionStatus = "pending" | "applied" | "void";
+export interface GiftCardRedemptionRow {
+  id: string;
+  gift_card_id: string;
+  order_id: string | null;
+  amount: number;
+  currency: string;
+  status: GiftCardRedemptionStatus;
+  applied_at: string | null;
+  created_at: string;
+}
+
 export interface StoreSettingsRow {
   id: boolean;
   vat_enabled: boolean;
@@ -273,6 +300,8 @@ export interface Database {
       orders: Table<OrderRow, "email">;
       order_items: Table<OrderItemRow, "order_id" | "title" | "sku" | "unit_price" | "quantity">;
       refunds: Table<RefundRow, "order_id" | "amount">;
+      gift_cards: Table<GiftCardRow, "code" | "initial_amount" | "balance">;
+      gift_card_redemptions: Table<GiftCardRedemptionRow, "gift_card_id" | "amount">;
       store_settings: Table<StoreSettingsRow, "id">;
       shipping_settings: Table<ShippingSettingsRow, "id">;
       social_drafts: Table<SocialDraftRow, "id">;

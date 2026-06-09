@@ -163,6 +163,10 @@ export async function autoFulfilOrder(orderId: string) {
     .eq("order_id", orderId);
   const items = (itemsData as unknown as OrderItem[]) ?? [];
 
+  // Nothing to fulfil (e.g. a gift-card purchase, or an all-unmapped order):
+  // leave the order `paid` rather than parking it in `fulfilling` forever.
+  if (!items.some((i) => i.provider)) return { skipped: "no-fulfillable-items" };
+
   // Mark in-flight. Guard against stomping a terminal status (a fast POD
   // shipped-webhook, or a re-run) — only advance from a pre-fulfilment state.
   await sb

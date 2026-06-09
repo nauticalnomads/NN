@@ -6,17 +6,22 @@ import { quoteShipping, type ShippingAddress, type CartLine } from "@/lib/shippi
 import type { CartItem } from "@/components/cart/CartProvider";
 import { absoluteUrl } from "@/lib/site";
 import { getCustomer } from "@/lib/customer";
+import { markOrderPaid } from "@/lib/orders";
+import { getRedeemableCard, createPendingRedemption } from "@/lib/gift-cards";
 
 type Payload = {
   email: string;
   shipping_address: ShippingAddress;
   items: CartItem[];
+  giftCardCode?: string;
 };
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export async function createCheckoutSession(
   payload: Payload,
 ): Promise<{ url?: string; error?: string }> {
-  const { email, shipping_address, items } = payload;
+  const { email, shipping_address, items, giftCardCode } = payload;
   if (!email || !items.length) return { error: "Missing email or items." };
 
   if (!process.env.STRIPE_SECRET_KEY) {
@@ -90,6 +95,26 @@ export async function createCheckoutSession(
   }));
 
   const shipping = await quoteShipping(cartLines, shipping_address);
+  const grossTotal = round2(subtotal + shipping.rate);
+
+  // Gift-card redemption (optional). A card covering the WHOLE order (incl.
+  // shipping) skips Stripe entirely; a partial card is applied via a one-off
+  // Stripe coupon, which only discounts line items — so partial redemptions are
+  // capped at the items subtotal (shipping is always paid by card on Stripe).
+  let giftCard: { id: string; redeem: number; full: boolean } | null = null;
+  if (giftCardCode && giftCardCode.trim()) {
+    const card = await getRedeemableCard(giftCardCode, currencyUpper);
+    if (card) {
+      if (card.balance >= grossTotal) {
+        giftCard = { id: card.id, redeem: grossTotal, full: true };
+      } else {
+        giftCard = { id: card.id, redeem: round2(Math.min(card.balance, subtotal)), full: false };
+      }
+    }
+  }
+  const discountTotal = giftCard ? giftCard.redeem : 0;
+  const grandTotal = round2(grossTotal - discountTotal);
+
   // Link to the signed-in customer if there is one (guest checkout otherwise).
   const customer = await getCustomer();
   const orderRow = {
@@ -100,7 +125,8 @@ export async function createCheckoutSession(
     subtotal,
     shipping_total: shipping.rate,
     tax_total: 0,
-    grand_total: subtotal + shipping.rate,
+    discount_total: discountTotal,
+    grand_total: grandTotal,
     shipping_address,
     shipping_quote: shipping,
     shipping_mode: shipping.mode,
@@ -139,6 +165,23 @@ export async function createCheckoutSession(
   });
   await sb.from("order_items").insert(itemRows as never);
 
+  // Reserve the gift-card redemption (debited on payment) and, if the card
+  // covers the whole order, finalise it now without a Stripe payment.
+  if (giftCard) {
+    await createPendingRedemption({
+      giftCardId: giftCard.id,
+      orderId,
+      amount: giftCard.redeem,
+      currency: currencyUpper,
+    });
+    if (giftCard.full || grandTotal <= 0) {
+      // Fully paid by gift card — mark paid (fires side effects: debits the
+      // card, sends the receipt, runs fulfilment) and skip Stripe.
+      await markOrderPaid(orderId, null);
+      return { url: absoluteUrl(`/orders/${orderId}`) };
+    }
+  }
+
   // Build Stripe line items + flat shipping option.
   const stripe = getStripe();
   const lineItems = items.map((i) => {
@@ -160,12 +203,27 @@ export async function createCheckoutSession(
     };
   });
 
+  // Partial gift card → one-off Stripe coupon. amount_off only ever discounts
+  // line items, and we capped giftCard.redeem at the items subtotal above, so
+  // the charged total is exactly grandTotal (= subtotal − redeem + shipping).
+  let discounts: { coupon: string }[] | undefined;
+  if (giftCard && giftCard.redeem > 0) {
+    const coupon = await stripe.coupons.create({
+      amount_off: Math.round(giftCard.redeem * 100),
+      currency,
+      duration: "once",
+      name: "Gift card",
+    });
+    discounts = [{ coupon: coupon.id }];
+  }
+
   let session;
   try {
     session = await stripe.checkout.sessions.create({
       mode: "payment",
       customer_email: email,
       line_items: lineItems,
+      ...(discounts ? { discounts } : {}),
       shipping_address_collection: {
         allowed_countries: [
           "GB",

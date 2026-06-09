@@ -223,6 +223,26 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
       },
     ],
   },
+  {
+    key: "gift_card_delivered",
+    label: "Gift card delivered",
+    description: "Sent to the purchaser once a gift card is paid for, with the redeemable code.",
+    defaultSubject: "Your {{amount}} Nautical Nomads gift card",
+    defaultHeading: "Here's your gift card",
+    defaultBody: `<p>Thanks — your gift card is ready to use. Here's the code:</p>
+<p style="margin:24px 0;text-align:center">
+  <span style="display:inline-block;font-family:ui-monospace,monospace;font-size:22px;letter-spacing:2px;background:#fff;border:1px solid rgba(42,40,38,0.15);border-radius:6px;padding:14px 22px">{{code}}</span>
+</p>
+<p>Balance: <strong>{{amount}}</strong>. Valid until <strong>{{expiry_date}}</strong>.</p>
+<p>Enter the code in the gift card box at checkout — it applies to your whole order, and any unused balance stays on the card.</p>
+<p><a href="{{shop_url}}" style="color:${ACCENT}">Browse the shop →</a></p>`,
+    vars: [
+      { name: "code", description: "The redeemable gift card code.", sample: "NN-AB2C-7K9D-QF3M" },
+      { name: "amount", description: "Formatted gift card value.", sample: "£50.00" },
+      { name: "expiry_date", description: "When the card expires.", sample: "9 June 2027" },
+      { name: "shop_url", description: "Link to the shop.", sample: site.url + "/shop" },
+    ],
+  },
 ];
 
 const BY_KEY = new Map(EMAIL_TEMPLATES.map((t) => [t.key, t]));

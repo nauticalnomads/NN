@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Container } from "@/components/Container";
 import { absoluteUrl } from "@/lib/site";
 
@@ -23,17 +24,17 @@ export default function GiftCards() {
           </h1>
           <p className="mt-4 font-body text-body leading-relaxed text-ink/75">
             Not sure of the size or the colour? Let them choose. Digital gift cards arrive by email
-            and never expire — good for anything in the shop.
+            the moment they&apos;re paid for, are valid for 12 months, and are good for anything in
+            the shop — with any unused balance carried over.
           </p>
-          <button
-            disabled
-            title="Coming soon"
-            className="mt-8 cursor-not-allowed rounded-sm bg-deep-ink/40 px-6 py-3 font-body text-[14px] font-medium text-hull-white"
+          <Link
+            href="/gift-cards/buy"
+            className="mt-8 inline-block rounded-sm bg-accent-sun px-6 py-3 font-body text-[14px] font-medium text-surface transition-opacity hover:opacity-90"
           >
-            Buy a gift card (coming soon)
-          </button>
+            Buy a gift card
+          </Link>
           <p className="mt-3 font-body text-caption text-ink/50">
-            Gift cards go live once the Stripe product is connected.
+            Have a code? Enter it at checkout to apply the balance.
           </p>
         </div>
       </div>

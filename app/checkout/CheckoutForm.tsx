@@ -4,6 +4,9 @@ import { useState, useTransition } from "react";
 import { useCart, type CartItem } from "@/components/cart/CartProvider";
 import { formatPrice } from "@/lib/format";
 import { createCheckoutSession } from "./actions";
+import { previewGiftCardAction } from "@/app/gift-cards/actions";
+
+type GiftInfo = { valid: boolean; balance?: number; currency?: string; message: string };
 
 export function CheckoutForm() {
   const { items, subtotal } = useCart();
@@ -14,8 +17,23 @@ export function CheckoutForm() {
   const [city, setCity] = useState("");
   const [postal, setPostal] = useState("");
   const [country, setCountry] = useState("GB");
+  const [gcCode, setGcCode] = useState("");
+  const [gcInfo, setGcInfo] = useState<GiftInfo | null>(null);
+  const [gcPending, startGc] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [pending, start] = useTransition();
+
+  function applyGiftCard() {
+    if (!gcCode.trim()) return;
+    setGcInfo(null);
+    startGc(async () => {
+      try {
+        setGcInfo(await previewGiftCardAction(gcCode.trim()));
+      } catch {
+        setGcInfo({ valid: false, message: "Couldn't check that code. Try again." });
+      }
+    });
+  }
 
   if (items.length === 0) {
     return (
@@ -45,6 +63,7 @@ export function CheckoutForm() {
             country,
           },
           items: items.map((i): CartItem => ({ ...i })),
+          giftCardCode: gcInfo?.valid ? gcCode.trim() : undefined,
         });
         if (error || !url) {
           setErr(error || "Checkout unavailable. Try again in a moment.");
@@ -122,6 +141,43 @@ export function CheckoutForm() {
         <p className="mt-1 font-mono text-caption text-ink/50">
           Shipping shown on the Stripe page.
         </p>
+
+        <div className="mt-5 border-t border-ink/10 pt-4">
+          <span className="font-mono text-caption tracking-wide text-ink/50 uppercase">
+            Gift card
+          </span>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={gcCode}
+              onChange={(e) => {
+                setGcCode(e.target.value);
+                setGcInfo(null);
+              }}
+              placeholder="NN-XXXX-XXXX-XXXX"
+              className="block w-full rounded-sm border border-ink/20 bg-surface px-3 py-2 font-mono text-caption uppercase"
+            />
+            <button
+              type="button"
+              onClick={applyGiftCard}
+              disabled={gcPending || !gcCode.trim()}
+              className="shrink-0 rounded-sm border border-ink/30 px-3 py-2 font-mono text-caption uppercase transition-colors hover:border-ink/60 disabled:opacity-50"
+            >
+              {gcPending ? "…" : "Apply"}
+            </button>
+          </div>
+          {gcInfo && (
+            <p
+              className={`mt-2 font-mono text-caption ${
+                gcInfo.valid ? "text-accent-sea" : "text-accent-sun"
+              }`}
+            >
+              {gcInfo.valid && gcInfo.balance != null
+                ? `Gift card applied — ${formatPrice(gcInfo.balance, gcInfo.currency)} available. Any remainder goes on the Stripe page.`
+                : gcInfo.message}
+            </p>
+          )}
+        </div>
+
         <button
           type="submit"
           disabled={pending}
