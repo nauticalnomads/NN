@@ -104,9 +104,10 @@ platform. Test in this order; each item assumes the ones above pass.
 >
 > These must be set as **build environment variables** (Cloudflare → Workers →
 > the project → Settings → **Build** → Variables) **and a fresh build + deploy
-> run afterwards**. Setting them as Worker **runtime secrets** (`wrangler secret
-> put` / Settings → Variables and Secrets) has **no effect** on these three —
-> the value is already compiled into the bundle. Concrete failure modes:
+> run afterwards**. Setting them as Worker **runtime secrets** (via
+> `wrangler secret put`, or Settings → Variables and Secrets) has **no effect**
+> on these three — the value is already compiled into the bundle. Concrete
+> failure modes:
 >
 > - `pk_live_…` set only as a runtime secret → **checkout still loads the test
 >   publishable key** (payments look fine in test, never go live).
