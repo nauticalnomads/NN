@@ -1,0 +1,856 @@
+// Generates a Supabase migration that seeds ~50 DRAFT journal posts about
+// watersports, each with a curated (verified) Unsplash cover. Drafts only —
+// nothing is published until reviewed in /admin/blog. Idempotent: re-running the
+// migration is a no-op (ON CONFLICT (slug) DO NOTHING).
+//
+//   node scripts/generate-blog-seed.mjs
+//
+// Output: supabase/migrations/20260609120000_seed_blog_drafts.sql
+import { writeFileSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+// Curated, theme-checked Unsplash photo IDs (all verified HTTP 200 + on-topic).
+const P = "?w=1600&q=80&auto=format&fit=crop";
+const IMG = {
+  barrel: `https://images.unsplash.com/photo-1502680390469-be75c86b636f${P}`,
+  silhouette: `https://images.unsplash.com/photo-1505459668311-8dfac7952bf0${P}`,
+  offtop: `https://images.unsplash.com/photo-1530870110042-98b2cb110834${P}`,
+  feet: `https://images.unsplash.com/photo-1502933691298-84fc14542831${P}`,
+  carve: `https://images.unsplash.com/photo-1455729552865-3658a5d39692${P}`,
+  sunsetsit: `https://images.unsplash.com/photo-1509914398892-963f53e6e2f1${P}`,
+  waveclose: `https://images.unsplash.com/photo-1500375592092-40eb2168fd21${P}`,
+  oceandusk: `https://images.unsplash.com/photo-1518837695005-2083093ee35b${P}`,
+  beachbirds: `https://images.unsplash.com/photo-1471922694854-ff1b63b20054${P}`,
+  turquoise: `https://images.unsplash.com/photo-1507525428034-b723cf961d3e${P}`,
+  beachsunset: `https://images.unsplash.com/photo-1473116763249-2faaef81ccda${P}`,
+  scuba: `https://images.unsplash.com/photo-1544551763-46a013bb70d5${P}`,
+  turtle: `https://images.unsplash.com/photo-1437622368342-7a3d73a34c8f${P}`,
+  swimmer: `https://images.unsplash.com/photo-1438029071396-1e831a7fa6d8${P}`,
+};
+
+const POSTS = [
+  {
+    title: "Catching Your First Wave: A Beginner's Guide to Surfing",
+    img: "feet",
+    excerpt:
+      "Everything you need to know to stand up on your first wave — from where to start to how to fall.",
+    body: `Surfing looks effortless from the beach and feels like chaos the first time you try it. That gap is normal, and it closes faster than you'd think.
+
+## Start in the white water
+Don't paddle for the big stuff. The broken, foamy waves close to shore are where every good surfer learned. They're forgiving, predictable, and plenty of fun.
+
+## The pop-up
+The single skill that matters most is the pop-up — going from lying down to standing in one smooth motion. Practise it on the sand a dozen times before you get wet.
+
+## Fall flat, not deep
+When you wipe out, fall flat and protect your head with your arms. Stay relaxed underwater; the wave passes in a second or two.
+
+Give it a few sessions before you judge it. The first time you glide along a wall of water under your own power, you'll understand why people rearrange their lives around it.`,
+  },
+  {
+    title: "The Art of the Dawn Patrol",
+    img: "sunsetsit",
+    excerpt: "Why the best surfers set an alarm for sunrise — and what the early sea gives back.",
+    body: `There's a reason surfers talk about dawn patrol in hushed, slightly smug tones. The sea at first light is a different place.
+
+## Glassy and empty
+Morning offshore winds groom the swell into clean, glassy lines, and the lineup is usually half-empty. You get more waves and better ones, before the day's crowd and wind arrive.
+
+## A clearer head
+Beyond the surf, there's the ritual: the quiet drive, the first cold step into the water, the sky turning from grey to gold. It's a kind of meditation that happens to involve a wetsuit.
+
+Set the alarm. Lay your kit out the night before. The bed will fight you, but the sea never disappoints the people who show up early.`,
+  },
+  {
+    title: "How to Read a Surf Forecast Like a Local",
+    img: "waveclose",
+    excerpt: "Swell height, period, wind and tide — decode the numbers and know before you go.",
+    body: `A surf forecast is just four or five numbers, but they tell you almost everything about whether a session will be worth it.
+
+## Swell height and period
+Height is how big; period is the gap between waves in seconds. A long period (12s+) means powerful, well-organised waves. A short period (under 8s) often means weak, messy surf, even at the same height.
+
+## Wind is everything
+Offshore wind (blowing from land to sea) holds waves up and grooms them clean. Onshore wind flattens and crumbles them. Light or no wind is ideal.
+
+## Don't forget the tide
+Some spots only work on a pushing tide, others on the drop. Local knowledge fills this gap — ask, watch, and keep a simple log of what worked.
+
+Put it together and you'll waste fewer drives and score more sessions.`,
+  },
+  {
+    title: "Choosing Your First Wetsuit: Thickness, Fit and Feel",
+    img: "silhouette",
+    excerpt:
+      "A wetsuit that fits is the difference between a great session and a cold, miserable one.",
+    body: `A good wetsuit is the most important kit you'll buy — get it right and you'll surf longer, more often, through more of the year.
+
+## Thickness for the water
+Thickness is written as two numbers, like 4/3 — 4mm on the core, 3mm on the limbs for flexibility. As a rough UK guide: 3/2 for summer, 4/3 for spring and autumn, 5/4 with boots and gloves for winter.
+
+## Fit is non-negotiable
+A wetsuit should be snug everywhere with no loose pockets, especially at the lower back. A thin layer of water gets in, warms to body temperature, and stays put — that's the whole idea. Too loose and it flushes cold water constantly.
+
+## Look after it
+Rinse in fresh water, dry in the shade, never leave it in a hot car. Treated well, a good suit lasts years.`,
+  },
+  {
+    title: "Why Rashvests Belong in Every Beach Bag",
+    img: "feet",
+    excerpt:
+      "Sun protection, board-rash defence and an extra layer — the humble rashvest does it all.",
+    body: `The rashvest is one of those quiet pieces of kit that you don't appreciate until you've been without one.
+
+## Sun you can't sweat off
+A good rashvest blocks most of the sun's UV, and unlike sunscreen it doesn't wash off after twenty minutes in the water. For long days afloat, that's a serious advantage for your skin.
+
+## No more board rash
+Lying and paddling on a board chafes — chest, ribs, underarms. A snug rashvest puts a smooth layer between you and the wax, so you can stay out longer in comfort.
+
+## A versatile layer
+Wear one under a wetsuit for warmth and easier changes, or on its own for swimming, snorkelling and paddleboarding. It's the most useful thing in the bag that you'll never think about again.`,
+  },
+  {
+    title: "Rip Currents: How to Spot Them and Escape",
+    img: "beachbirds",
+    excerpt:
+      "The most important beach-safety knowledge there is — could save your life or someone else's.",
+    body: `Rip currents are the single biggest hazard at the beach, and they catch out strong swimmers as easily as weak ones. A little knowledge goes a long way.
+
+## Spotting a rip
+Look for a channel of darker, calmer-looking water cutting out through the breaking waves, often with a rippled or foamy surface and debris heading seaward. Take a minute to read the water before you go in.
+
+## If you're caught
+Don't panic and don't fight it — you can't out-swim a rip. Stay afloat, signal for help, and swim **parallel** to the beach until you're out of the pull, then angle back to shore. Rips are narrow; a short sideways swim usually frees you.
+
+## Swim near a lifeguard
+The simplest rule of all: swim between the flags, where lifeguards can see you. It's the safest choice you can make.`,
+  },
+  {
+    title: "Surf Etiquette: The Unwritten Rules of the Lineup",
+    img: "carve",
+    excerpt: "Respect the order, share the waves, and you'll be welcome anywhere you paddle out.",
+    body: `Every lineup runs on a set of unwritten rules. Learn them and you'll be safe, respected, and welcome — ignore them and you'll find out fast.
+
+## One surfer per wave
+The surfer closest to the breaking part of the wave (the peak) has priority. Dropping in front of someone already riding is the cardinal sin.
+
+## Don't snake, don't ditch
+Paddling around someone to steal their position is "snaking" — don't. And never throw your board to duck a wave if anyone is behind you.
+
+## Wait your turn
+There's a rough queue. Take your waves, but share them. A few friendly words and a bit of patience earn more than any aggressive paddle-battle.
+
+Respect the locals, respect the order, and the sea opens up to you.`,
+  },
+  {
+    title: "Cold-Water Surfing: Falling for the Off-Season",
+    img: "silhouette",
+    excerpt: "Empty lineups, powerful winter swell, and the strange joy of surfing in the cold.",
+    body: `When the crowds vanish for winter, the waves are often at their best. Cold-water surfing is its own reward.
+
+## Why bother
+Winter brings the biggest, cleanest groundswells of the year, and the lineup you fought for in August is suddenly empty. The cold keeps the fair-weather crowd at home — more waves for you.
+
+## Stay warm, stay out
+Modern winter suits, boots, gloves and a hood make freezing water genuinely surfable. Layer up properly and you can stay out for hours. A warm flask and dry robe for afterward make all the difference.
+
+## The afterglow
+There's nothing quite like the post-surf glow after a cold session — that deep, earned warmth as you wrap your hands around a hot drink. The off-season belongs to those willing to suit up.`,
+  },
+  {
+    title: "Stand-Up Paddleboarding for Absolute Beginners",
+    img: "oceandusk",
+    excerpt:
+      "The most accessible way onto the water — calm, social, and surprisingly good for you.",
+    body: `Paddleboarding has exploded for good reason: it's easy to learn, gentle on the body, and a brilliant way to explore flat water.
+
+## Getting started
+Begin on calm, sheltered water with no wind. Start on your knees in the middle of the board, find your balance, then stand one foot at a time with knees soft and eyes on the horizon — not your feet.
+
+## The paddle
+Keep the blade angled away from you, reach forward, and pull back to your ankle in smooth strokes. Switch sides every few strokes to track straight.
+
+## Safety first
+Always wear a leash and a buoyancy aid, check the wind (offshore wind can push you out fast), and tell someone your plan. Then relax and enjoy the view — few things beat gliding over still water at sunrise.`,
+  },
+  {
+    title: "Wild Swimming: Finding Calm in Open Water",
+    img: "swimmer",
+    excerpt: "Leave the pool behind. Open water is colder, wilder, and good for body and mind.",
+    body: `Swimming in the sea, a lake or a river is a different animal from lane-swimming — and growing numbers of people are hooked.
+
+## Why people love it
+Cold open water is invigorating, mood-lifting, and a genuine reset for a busy mind. Many swimmers describe a calm and clarity that lasts well after they've dried off.
+
+## Ease in safely
+Acclimatise slowly, never dive straight into cold water, and know that cold-water shock passes within a minute if you stay calm. Swim with others, wear a bright tow float, and know your exit point.
+
+## Respect the conditions
+Check tides and currents, avoid swimming alone, and warm up gradually afterward — layers, a hot drink, and movement. Start small, build up, and let the water do the rest.`,
+  },
+  {
+    title: "The Quiet Thrill of Freediving",
+    img: "scuba",
+    excerpt: "One breath, no bubbles — the meditative discipline of diving on your own air.",
+    body: `Freediving is diving on a single breath — no tank, no bubbles, just you and the blue. It's as much a mental practice as a physical one.
+
+## A different kind of calm
+Where scuba is about gear and logistics, freediving strips everything back. Slowing your heart rate, relaxing completely, and trusting your body is the whole game. Many freedivers describe a profound stillness underwater.
+
+## Never alone
+The golden rule is simple and absolute: never freedive alone. Always dive with a trained buddy who watches you on every descent and ascent. Take a proper course before going deep.
+
+## Start shallow
+Begin with breath-hold and relaxation drills, then gentle descents in safe, supervised conditions. Done right, freediving opens up the underwater world in the most natural way there is.`,
+  },
+  {
+    title: "Snorkelling 101: A Window to the Reef",
+    img: "turtle",
+    excerpt: "No training, minimal kit, maximum wonder — how to get the most from a mask and fins.",
+    body: `Snorkelling is the easiest way into the underwater world. With a mask, snorkel and fins you can spend hours watching a reef come to life.
+
+## Gear that fits
+A leaking mask ruins everything. Test the seal by placing it on your face without the strap and breathing in — it should hold by suction alone. A little anti-fog (or spit) keeps the lens clear.
+
+## Breathe slow, move slow
+Relax, breathe slowly through the snorkel, and let your fins do gentle work. Sudden movements scare wildlife and waste energy. Float, drift, and observe.
+
+## Look, don't touch
+Reefs are fragile and some marine life stings or bites. Keep your distance, never stand on coral, and take only photos. Done respectfully, snorkelling shows you a world most people never see.`,
+  },
+  {
+    title: "Sea Kayaking: Exploring the Coast from the Water",
+    img: "beachsunset",
+    excerpt: "Caves, coves and seal colonies — the coastline reveals its secrets from a kayak.",
+    body: `A sea kayak gets you to places no path reaches — hidden coves, sea caves, and quiet beaches you can only land on from the water.
+
+## The right boat
+Sea kayaks are longer and narrower than recreational ones, built to track straight and handle swell. A spray deck keeps water out, and bulkheads keep you afloat if you capsize.
+
+## Plan around the sea
+Tides and wind matter enormously. Paddle with the tide where you can, check the forecast, and always carry a means of calling for help. Tell someone your route and return time.
+
+## Go with experience
+Take a course or paddle with a club before heading out alone. Learn to re-enter your boat after a capsize. Then enjoy the slow magic of exploring the coast at water level.`,
+  },
+  {
+    title: "Bodyboarding Is Underrated — Here's Why",
+    img: "barrel",
+    excerpt:
+      "Closer to the wave, quicker to learn, and capable of barrels most surfers only dream of.",
+    body: `Bodyboarding gets unfairly dismissed as the easy option. In truth it's a brilliant discipline that holds its own in waves surfers won't touch.
+
+## Quick to learn, hard to master
+You'll catch waves on day one — that low barrier is half the appeal. But advanced bodyboarding, with rolls, spins and drop-knee, takes real skill.
+
+## Made for heavy waves
+Lying prone and low to the water, bodyboarders thrive in steep, hollow, fast-breaking surf where standing up is nearly impossible. Some of the most dramatic barrel riding on earth is done on a bodyboard.
+
+## Less kit, more sessions
+A board, fins, and a leash and you're away. It packs small, travels easy, and gets you in the water more often. Don't knock it till you've ridden one.`,
+  },
+  {
+    title: "Learning to Surf as an Adult",
+    img: "offtop",
+    excerpt: "It's never too late to start. A realistic look at picking up surfing later in life.",
+    body: `Plenty of people assume surfing is something you have to start as a kid. Not true — adults learn all the time, and bring patience and persistence kids often lack.
+
+## Manage expectations
+Progress comes in plateaus. You'll have frustrating sessions where nothing clicks, then a breakthrough that makes it all worth it. That's the sport, at any age.
+
+## A lesson is worth it
+A few hours with a good instructor saves weeks of bad habits. They'll put you on the right board (big and stable to start) and in the right waves.
+
+## Fitness helps, stubbornness helps more
+Paddling is tiring and unfamiliar at first. Build up gradually, stretch, and keep showing up. The sea rewards consistency over talent. Start now — your future self will thank you.`,
+  },
+  {
+    title: "A Beginner's Guide to Kitesurfing",
+    img: "carve",
+    excerpt: "Harness the wind and skim across the water — what it takes to get started safely.",
+    body: `Kitesurfing combines the power of the wind with the glide of a board, and on a good day it feels like flying. It also demands respect and proper training.
+
+## Learn the kite first
+Before you ever touch a board, you'll spend hours learning to fly a trainer kite on land. Controlling the kite's power safely is the foundation of everything.
+
+## Take lessons — really
+This is not a sport to teach yourself. A reputable school teaches launching, landing, self-rescue, and the safety systems that can save your life. Skipping this stage is genuinely dangerous.
+
+## Mind the conditions
+Steady side-shore wind is ideal; gusty or offshore wind is hazardous. Always check forecasts, use the right kite size for the wind strength, and never ride alone when learning. Get it right and few sports are as exhilarating.`,
+  },
+  {
+    title: "Wing Foiling: The Sport Taking Over the Bay",
+    img: "oceandusk",
+    excerpt: "The fastest-growing watersport going — a handheld wing, a foilboard, and pure glide.",
+    body: `If you've seen people silently rising above the water holding what looks like an inflatable wing, that's wing foiling — and it's everywhere now.
+
+## What it is
+You hold a handheld inflatable wing for power and stand on a board fitted with a hydrofoil. Once you're moving, the foil lifts the board clear of the water and the drag vanishes. It's quiet, smooth, and addictive.
+
+## Why it's booming
+It's more approachable than kitesurfing (no lines to manage), works in a wide range of conditions, and the foil makes even small wind or swell rideable. The learning curve is real but rewarding.
+
+## Getting started
+Lessons are strongly recommended — foils are sharp and balance takes practice. Start on flat water, expect plenty of falls, and savour that first moment of silent flight.`,
+  },
+  {
+    title: "Windsurfing's Comeback",
+    img: "silhouette",
+    excerpt: "The original board-and-sail sport is cool again — and as fun as it ever was.",
+    body: `Windsurfing defined a generation of beach culture, faded for a while, and is now firmly back in fashion. There's never been a better time to try it.
+
+## A brilliant all-rounder
+Few sports give you so much for such a range of conditions. Cruise gently on flat water, or rig down and blast through waves when it's howling — windsurfing scales with your skill and the day.
+
+## Easier than it looks to start
+On a big, stable board in light wind, most people are sailing back and forth within a session or two. The famous difficulty comes later, when you progress to planing and the harness.
+
+## Modern kit helps
+Lighter boards and more forgiving sails have made learning far gentler than in the sport's heyday. Find a school on a sheltered bay and rediscover why so many fell for it.`,
+  },
+  {
+    title: "Coasteering: Scramble, Jump, Swim, Repeat",
+    img: "waveclose",
+    excerpt:
+      "Part climbing, part swimming, all adventure — exploring the wild edge where land meets sea.",
+    body: `Coasteering is exactly what it sounds like: making your way along a rocky coastline by any means necessary — scrambling, climbing, swimming, and leaping into the sea.
+
+## A full-body adventure
+There's no set route. You traverse cliffs just above the waves, swim through gullies, explore caves, and jump from rocks into deep water. It's exhilarating and surprisingly accessible.
+
+## Go with a guide
+Local conditions — tides, swell, water depth — make all the difference between a safe jump and a serious accident. A qualified guide knows the safe lines and the safe leaps. Never freelance it on an unknown coast.
+
+## Kit up
+A wetsuit, helmet, buoyancy aid and old trainers are standard. Most centres provide everything. If you want adventure without a steep learning curve, coasteering is hard to beat.`,
+  },
+  {
+    title: "Bodysurfing: The Purest Way to Ride",
+    img: "barrel",
+    excerpt: "No board, no leash — just you, a pair of fins, and the wave itself.",
+    body: `Strip surfing back to its absolute essentials and you get bodysurfing: riding a wave with nothing but your own body and, usually, a pair of swim fins.
+
+## Back to basics
+There's a purity to it that boardriders chase their whole lives. You feel the wave directly, become part of it, and read the ocean in a way no board allows.
+
+## How it works
+Swim hard to match the wave's speed as it picks you up, extend an arm to plane, and angle along the face. A small handplane adds lift and control. Fins give you the propulsion to catch more.
+
+## Anywhere there's swell
+You need almost no kit and no perfect break — even a beach shorey will do. It's the cheapest, most spontaneous way to ride a wave there is.`,
+  },
+  {
+    title: "Five UK Surf Spots Worth the Drive",
+    img: "beachsunset",
+    excerpt:
+      "From Cornwall to the Scottish far north, the British Isles punch above their weight for waves.",
+    body: `The UK isn't the tropics, but it has a coastline rich with surf — and a hardy culture to match. Here's a taste of what's out there.
+
+## The classics
+Cornwall's beaches are the heartland of British surfing, with consistent swell and a buzzing scene. Croyde and Woolacombe in Devon offer powerful beach breaks. Pembrokeshire's coast hides gems for those who explore.
+
+## Going further
+Brave the cold and head north: Thurso in Scotland is a world-class reef break that draws surfers from across the globe, while Northern Ireland's coast serves up serious waves in dramatic scenery.
+
+## Go prepared
+UK surf means a good wetsuit most of the year and respect for cold, powerful water. Check the forecast, mind the tides, and pack a flask. The reward is empty waves and wild coastline.`,
+  },
+  {
+    title: "Atlantic vs Mediterranean: Two Kinds of Sea",
+    img: "turquoise",
+    excerpt:
+      "Powerful swell or warm calm? Why the two seas offer completely different days on the water.",
+    body: `Europe gives watersports lovers two very different playgrounds. Knowing what each offers helps you plan the right trip.
+
+## The Atlantic: power and swell
+The open Atlantic generates big, consistent groundswell — the engine behind the surf coasts of Portugal, France, Spain and the UK. It's colder, wilder, and the home of serious surfing and windswept beaches.
+
+## The Mediterranean: warm and gentle
+The Med is warmer, calmer, and more sheltered, with smaller, less consistent waves. That makes it ideal for paddleboarding, swimming, snorkelling, and learning watersports in friendly conditions.
+
+## Pick your day
+Want to chase powerful surf and don't mind the cold? Go Atlantic. After warm water, easy swimming and a relaxed pace? The Med awaits. Many of us love both, for different reasons.`,
+  },
+  {
+    title: "Packing for a Surf Trip: The Only List You Need",
+    img: "turquoise",
+    excerpt: "Forget one small thing and it can sour a whole trip. Here's what actually matters.",
+    body: `A good surf trip lives or dies by your packing. Boards and boardies are obvious — it's the small stuff people forget.
+
+## The essentials
+Board (and a spare leash), the right wetsuit for the destination, wax for the water temperature, and reef-safe sunscreen. A rashvest doubles as sun protection and a base layer.
+
+## Don't forget
+A travel towel or changing robe, a dry bag for valuables on the beach, a basic ding-repair kit, and a small first-aid kit. Earplugs if you're prone to surfer's ear.
+
+## Travel smart
+Pad your board bag well, check airline board fees in advance, and keep wax out of hot luggage. Roll a checklist into a note on your phone so the next trip packs itself. Then go score some waves.`,
+  },
+  {
+    title: "Van Life and the Endless Summer",
+    img: "beachsunset",
+    excerpt:
+      "Chasing waves from a converted van — the romance, the reality, and the simple freedom of it.",
+    body: `Few images capture the surf dream like a van parked above an empty break, board drying in the sun. The reality is messier and even better.
+
+## The freedom
+A van means you wake up where the waves are. No check-out times, no booking ahead — just follow the swell up and down the coast and sleep where the day ends. That freedom is genuinely addictive.
+
+## The reality
+It's small-space living: limited water, no shower beyond the sea and a portable rinse, and constant little logistics. The romance is real, but so is the organisation it takes.
+
+## Travel light, tread lightly
+Park considerately, leave no trace, and support the coastal towns you pass through. The van-life surf community thrives on respect — for the coast and the people who live there year-round.`,
+  },
+  {
+    title: "Surfing With Kids: Making the Sea a Family Affair",
+    img: "beachbirds",
+    excerpt:
+      "Raising little water-lovers — how to get children into the waves safely and joyfully.",
+    body: `Sharing the sea with your kids is one of the great joys of a surfing life. The trick is keeping it fun, safe, and pressure-free.
+
+## Start in the foam
+Soft foam boards and gentle white water are perfect for kids. Push them onto little waves and let them ride on their bellies first — standing up can come whenever they're ready.
+
+## Safety and warmth
+Children get cold fast, so a good-fitting wetsuit matters even in summer. Always stay within arm's reach in the water, swim near a lifeguard, and know your limits as the adult in charge.
+
+## Keep it joyful
+Sandcastles, snacks and a positive attitude matter more than progress. If they associate the beach with fun, they'll come back for life. Some days the best session is just splashing about together.`,
+  },
+  {
+    title: "Women in the Water: A New Wave",
+    img: "carve",
+    excerpt:
+      "Female participation in surfing and watersports is surging — and reshaping the culture.",
+    body: `For decades, surf culture was overwhelmingly male. That's changing fast, and the water is better for it.
+
+## A surge in participation
+More women and girls are surfing, paddleboarding, swimming and competing than ever before. Equal prize money in pro surfing, visible role models, and women-led surf clubs have all helped open the door.
+
+## Community matters
+Women's surf collectives, beginner meetups and female-only sessions have made lineups feel more welcoming. For many, surfing with other women removed the intimidation that kept them on the beach.
+
+## Kit that fits
+Better wetsuits and swimwear designed for women — not just shrunk-down men's gear — make a real difference to comfort and confidence in the water. The new wave is here, and it's only growing.`,
+  },
+  {
+    title: "Post-Surf Recovery: Looking After Body and Board",
+    img: "oceandusk",
+    excerpt:
+      "What you do after a session keeps you surfing for decades. A simple routine for both.",
+    body: `Surfing is demanding on the body, and salt and sun are hard on your kit. A few habits after each session pay off for years.
+
+## Look after yourself
+Rehydrate, eat something proper, and stretch out your shoulders, back and hips while you're still warm. Paddling tightens everything; a few minutes of mobility keeps niggles from becoming injuries.
+
+## Rinse everything
+Fresh water is the enemy of wear. Rinse your wetsuit, leash and board, and dry your suit in the shade — sun and heat destroy neoprene. Hang it on a wide hanger, not folded over a thin rail.
+
+## Mind your board
+Check for dings and dry your board out of direct sun (heat can delaminate it). A quick wax scrape and re-wax keeps your grip fresh. Small care, long life.`,
+  },
+  {
+    title: "Surf Fitness: Train on Land, Thrive in the Water",
+    img: "swimmer",
+    excerpt:
+      "Paddle power, pop-up explosiveness and staying loose — train the things surfing demands.",
+    body: `You don't need to be an athlete to surf, but a little targeted fitness means more waves and fewer injuries.
+
+## Build paddle endurance
+Most of surfing is paddling. Swimming, especially front crawl, builds exactly the shoulder and back endurance you need. Even a couple of pool sessions a week transform your sessions.
+
+## Explosive and mobile
+The pop-up is an explosive movement — squats, lunges and burpees build the power for it. Crucially, work your mobility too: shoulders, thoracic spine and hips. Stiffness is what holds most surfers back.
+
+## Balance and core
+Wobble-board and single-leg work sharpen the balance surfing demands, and a strong core links it all together. Train the movements, not just the muscles, and the water feels easier every time.`,
+  },
+  {
+    title: "Breath-Hold Basics for Watersports",
+    img: "scuba",
+    excerpt:
+      "Calmer underwater, longer hold-downs handled — why breath training helps every surfer and swimmer.",
+    body: `You don't have to be a freediver to benefit from breath-hold training. For surfers and swimmers, comfort underwater is a genuine safety skill.
+
+## Why it matters
+A big wave can hold you under for a few seconds. Panic burns oxygen fast; calm conserves it. Training your breath teaches your body and mind to stay relaxed when you can't breathe — exactly when it counts.
+
+## Train safely on land
+Never practise breath-holds in water alone. Do static breath-hold drills lying down on dry land, with no pressure to push limits. Relaxation, not heroics, is the goal.
+
+## The relaxation effect
+Beyond safety, controlled breathing lowers stress and sharpens focus — useful well beyond the water. Learn from a qualified coach, go gently, and let calm become your default in the sea.`,
+  },
+  {
+    title: "Understanding Tides: The Ocean's Heartbeat",
+    img: "waveclose",
+    excerpt: "Why the sea rises and falls, and why it changes everything you do at the beach.",
+    body: `Tides shape every coastal day, from where you can walk to whether the surf works. A little understanding goes a long way.
+
+## What causes them
+Tides are mostly the moon's gravity tugging the oceans, with the sun adding its pull. As the earth rotates, most coasts see two high and two low tides a day, roughly six hours apart.
+
+## Spring and neap
+When sun and moon align, you get larger "spring" tides with big ranges. When they're at right angles, smaller "neap" tides. This cycle repeats roughly every two weeks.
+
+## Why surfers care
+Many breaks only work on a certain tide — too high and waves swamp, too low and they close out over rock. Always check the tide table alongside the surf forecast, and never get cut off by an incoming tide.`,
+  },
+  {
+    title: "How Waves Are Made: A Simple Guide to Swell",
+    img: "waveclose",
+    excerpt:
+      "From distant storms to the wave at your feet — the surprisingly long journey of a swell.",
+    body: `The clean wave peeling along the beach started life hundreds of miles away. Understanding that journey makes you a better ocean reader.
+
+## Wind makes waves
+Out at sea, wind blowing over the surface transfers energy into the water, building waves. The stronger the wind, the longer it blows, and the greater the distance (the "fetch"), the bigger the swell.
+
+## The long journey
+Those waves then travel out of the storm as organised "groundswell", sorting themselves into clean, evenly spaced lines as they go. That's why the best surf often arrives on a calm, sunny day — the storm that made it is far away.
+
+## Meeting the shore
+As swell reaches shallow water near the coast, it slows, steepens, and finally breaks. The shape of the seabed decides whether you get a gentle roller or a hollow barrel.`,
+  },
+  {
+    title: "Beach Safety Flags Explained",
+    img: "beachbirds",
+    excerpt: "Red, yellow, black-and-white — knowing the flags is the simplest way to stay safe.",
+    body: `Lifeguards use a simple flag system to keep beachgoers safe. Learning it takes two minutes and could save a life.
+
+## The key flags
+**Red and yellow** marks the lifeguarded zone — the safest place to swim and bodyboard. **Black and white chequered** marks the area for surfboards and other craft, kept separate from swimmers. A solid **red** flag means danger: do not enter the water. An **orange windsock** warns of offshore winds that can blow inflatables out to sea.
+
+## Use the patrolled zone
+Whenever lifeguards are on duty, swim between the red and yellow flags. They've chosen that spot because it's the safest stretch of beach, and they can see you if you get into trouble.
+
+## When in doubt, ask
+Lifeguards would always rather you ask than guess. A quick word before you go in is never a bad idea.`,
+  },
+  {
+    title: "Jellyfish Stings and Other Beach First Aid",
+    img: "turquoise",
+    excerpt: "Stings, cuts and cramps happen. Simple, sensible responses for common beach mishaps.",
+    body: `Most beach days are trouble-free, but knowing some basic first aid means small mishaps stay small.
+
+## Jellyfish stings
+Rinse with seawater (not fresh water, which can make it worse), carefully remove any tentacles with a gloved hand or card, and soak in warm water if you can. Seek medical help for severe reactions or stings to the face. Forget the old myths — vinegar helps with some species, but plain warm water is a safe default.
+
+## Cuts and grazes
+Rinse coastal cuts thoroughly — seawater and rock carry bacteria — and clean them properly back on land. Watch for infection.
+
+## Cramp and cold
+Cramp usually eases with a gentle stretch; get out and warm up if cold sets in. Carry a small waterproof first-aid kit, and always know where the nearest lifeguard is.`,
+  },
+  {
+    title: "The Magic of Rockpooling",
+    img: "beachbirds",
+    excerpt:
+      "Low tide turns the shoreline into a living treasure hunt. A gentle adventure for all ages.",
+    body: `When the tide drops, it leaves behind miniature worlds in the rocks — and exploring them is one of the simplest coastal joys.
+
+## What you'll find
+Rock pools teem with life: crabs, shrimp, anemones, tiny fish, limpets and starfish. Each pool is its own little ecosystem, and no two are the same. It's endlessly fascinating, especially for kids.
+
+## Go gently
+Treat the pools with care. Wet your hands before touching anything, return rocks exactly as you found them, and always put creatures back where they came from. These are homes, not toys.
+
+## Time it right
+Head out on a falling tide so you're never caught by the incoming water, and wear grippy shoes — wet rock and seaweed are slippery. Bring a small net and a sense of wonder. The shore will do the rest.`,
+  },
+  {
+    title: "Marine Wildlife You Might Meet in the Water",
+    img: "turtle",
+    excerpt:
+      "Seals, dolphins, turtles and more — the encounters that make a session unforgettable.",
+    body: `Spend enough time in the sea and you'll share it with its residents. These encounters are the moments surfers and swimmers never forget.
+
+## Who you might see
+Curious seals often pop up in lineups to watch. Dolphins sometimes surf the same waves we do. In warmer waters, turtles glide by and rays cruise the shallows. Even a passing shoal of fish is a small thrill.
+
+## Watch, don't disturb
+Give wildlife space and never chase or feed it. Let animals approach on their terms — a relaxed seal will hang around far longer than a hassled one. You're a guest in their home.
+
+## A reason to protect it
+Every encounter is a reminder of what's at stake. The healthier our seas, the richer these moments become. Look after the water, and it keeps giving back.`,
+  },
+  {
+    title: "Protecting the Sea That Gives Us So Much",
+    img: "turtle",
+    excerpt:
+      "If the ocean is your playground, it's also your responsibility. Small habits, big difference.",
+    body: `Everyone who loves the water has a stake in its health. The good news is that small, consistent choices genuinely add up.
+
+## At the beach
+Take your litter home — and a little extra if you can. A two-minute beach clean before you leave becomes a habit that, multiplied across a community, transforms a coastline.
+
+## In your kit
+Choose reef-safe sunscreen, longer-lasting gear over fast fashion, and eco-friendlier waxes where you can. Repair before you replace. The most sustainable wetsuit is the one you already own, looked after well.
+
+## Beyond the individual
+Support the charities protecting our seas, back better policy on plastic and water quality, and share what you know. Caring for the ocean isn't about being perfect — it's about everyone doing a bit, every time.`,
+  },
+  {
+    title: "The Problem With Beach Plastic — and What Helps",
+    img: "beachbirds",
+    excerpt:
+      "Where ocean plastic comes from, why it matters, and the actions that actually move the needle.",
+    body: `Plastic on our beaches is one of the most visible signs of a stressed ocean. Understanding it helps us tackle it.
+
+## How it gets there
+Much marine plastic comes from land — litter, packaging and microplastics washing down rivers and drains into the sea. Once there, it breaks into ever-smaller pieces, entering the food chain and harming wildlife.
+
+## What actually helps
+Cutting single-use plastic at the source matters most: reusable bottles, bags and containers, and supporting businesses that reduce packaging. Beach cleans remove what's already there and, just as importantly, reveal the scale of the problem.
+
+## Be part of it
+Join a local beach clean, carry a spare bag for stray litter, and choose products built to last. None of it is glamorous, but a coastline full of people who care is a powerful thing.`,
+  },
+  {
+    title: "Eco Wax, Better Gear: Small Swaps That Matter",
+    img: "feet",
+    excerpt: "Greener choices for the kit you already use — without sacrificing performance.",
+    body: `You don't have to overhaul your whole setup to tread more lightly. A few smarter choices make a real difference over a surfing life.
+
+## Wax and sunscreen
+Traditional surf wax is petroleum-based; plant-based, biodegradable waxes work just as well and don't leave petrochemicals in the water. Swap chemical sunscreens for reef-safe, mineral ones that don't harm marine life.
+
+## Gear that lasts
+Fast, cheap kit wears out and ends up in landfill. Better-made wetsuits, boardshorts and accessories cost more upfront but last far longer — and many can be repaired rather than binned.
+
+## Repair, reuse, pass on
+Patch a wetsuit, fix a ding, re-grip a board. When you do upgrade, sell or donate the old gear. Sustainability in watersports is mostly about buying less and looking after it better.`,
+  },
+  {
+    title: "Looking After Your Surfboard",
+    img: "feet",
+    excerpt:
+      "Dings, sun and bad storage kill boards early. Keep yours alive and riding well for years.",
+    body: `A surfboard is an investment and, treated well, a long-term friend. A little care keeps it fast, watertight and lasting.
+
+## Mind the sun and heat
+Heat is a board's worst enemy — never leave it in a hot car or in direct sun for hours, which can delaminate the foam and warp it. Store it in the shade, ideally in a board bag.
+
+## Fix dings fast
+A cracked or dinged board lets water into the foam, which adds weight and weakens it. Dry it out and seal even small dings promptly with a repair kit. Don't surf an open ding.
+
+## Wax and store smart
+Scrape and refresh old, grimy wax for better grip. Store the board on padded racks or flat, never resting on its fins or leaning on a thin edge. Simple habits, years of extra life.`,
+  },
+  {
+    title: "Surf Photography: Capturing the Ride",
+    img: "barrel",
+    excerpt:
+      "From the beach or in the water — how to start photographing waves and the people who ride them.",
+    body: `A great surf photo freezes a fleeting moment of speed and spray. Getting started is easier than you might think.
+
+## From the shore
+A long zoom lens lets you shoot the action from the beach safely and cheaply to start. Shoot in good light — early morning and late afternoon are golden — and use a fast shutter speed to freeze the spray.
+
+## Into the water
+The real magic happens in the water with a wide lens and a proper housing. It's a serious step up in cost and risk, and demands strong swimming and wave knowledge — you're swimming in the impact zone with expensive kit.
+
+## Respect the lineup
+Don't block surfers or paddle into their way for a shot. Be patient, learn the break, and the images will come. Above all, swim within your limits.`,
+  },
+  {
+    title: "River Surfing: Riding a Wave That Never Ends",
+    img: "waveclose",
+    excerpt:
+      "No ocean required — standing river waves let you surf the same spot for as long as you like.",
+    body: `Far from the coast, surfers are riding waves that never break and never stop — standing waves formed by rivers flowing over features in the riverbed.
+
+## A different kind of wave
+Unlike ocean waves that roll past, a river wave stays in one place while the water rushes through it. You can ride the same wave for minutes on end, swapping in and out with others in a queue.
+
+## Famous spots
+Cities far from any sea have become surf destinations thanks to river waves — some natural, some engineered. They've created thriving inland surf communities where you'd least expect them.
+
+## Know the risks
+River currents, cold water and underwater hazards make river surfing its own discipline. Learn the spot, wear the right protection, and go with people who know it. Then enjoy the longest rides of your life.`,
+  },
+  {
+    title: "Big-Wave Surfing: Inside the World of Giants",
+    img: "offtop",
+    excerpt:
+      "The athletes, the spots and the sheer commitment behind riding waves the size of buildings.",
+    body: `At the extreme end of the sport, a small group of surfers chase waves tall enough to be measured in storeys. It's equal parts athleticism, courage and obsession.
+
+## The arenas
+Legendary big-wave spots around the world come alive only a handful of days a year, when distant storms send giant swells their way. When they do, the world's best travel in to ride them.
+
+## More than bravery
+Big-wave surfing demands extraordinary fitness, breath-hold training for brutal hold-downs, intimate knowledge of the break, and a whole safety team on jet skis. Riders often get towed in by ski to catch waves moving too fast to paddle into.
+
+## Respect from afar
+For most of us this is a spectator's world — but understanding it deepens respect for the ocean's power, and for the people willing to meet it head-on.`,
+  },
+  {
+    title: "An Introduction to Hydrofoiling",
+    img: "oceandusk",
+    excerpt: "The technology lifting boards clear of the water — and changing watersports forever.",
+    body: `Hydrofoils have quietly revolutionised watersports, from surfing to sailing. Once you've seen a board fly silently above the surface, you won't forget it.
+
+## How it works
+A hydrofoil is an underwater wing on a mast beneath the board. As you gain speed, the wing generates lift — just like an aeroplane wing in air — and raises the whole board out of the water, cutting drag almost to nothing.
+
+## Why it matters
+Foiling lets you ride tiny, gutless waves, glide on the open ocean's swell, and reach surprising speeds with very little energy. It's opened up new disciplines like foil surfing, wing foiling and downwind foiling.
+
+## A steep but rewarding curve
+Balancing on a foil takes practice, and the kit is sharp — lessons and care are essential. But that first taste of silent flight hooks almost everyone who tries it.`,
+  },
+  {
+    title: "Longboard vs Shortboard: Which Should You Ride?",
+    img: "carve",
+    excerpt: "Glide and grace or speed and snap? Choosing the board that suits you and your waves.",
+    body: `One of surfing's classic debates isn't really a debate — it's about matching the board to your waves, your style, and the kind of surfing you love.
+
+## The longboard
+Long, stable and easy to paddle, longboards catch waves early and cruise with grace. They shine in small, mellow surf and reward smooth, flowing style — including the art of walking the board to the nose.
+
+## The shortboard
+Shorter, lighter and more responsive, shortboards are built for steeper, more powerful waves and quick, sharp turns. They're harder to catch waves on and demand more from the surfer, but offer high performance.
+
+## Why not both?
+Many surfers keep a quiver and pick a board to suit the day. Beginners almost always learn faster on something long and stable. Ride what makes you smile in the waves you actually get.`,
+  },
+  {
+    title: "The Healing Power of Sea Swimming",
+    img: "swimmer",
+    excerpt: "Cold water, salt air and rhythm — the growing evidence that the sea is good for us.",
+    body: `Sea swimmers have long sworn by its benefits, and a growing body of interest is exploring why a dip in cold salt water leaves us feeling so good.
+
+## Body and mind
+Cold-water immersion is invigorating and, for many, a powerful mood-lifter. The shock of the cold, the focus it demands, and the calm that follows can quiet anxiety and lift the spirits. The rhythm of swimming itself is meditative.
+
+## A gentle, social habit
+Unlike high-impact sports, swimming is easy on the joints and open to almost everyone. Many people find community in regular group dips — accountability, safety, and friendship, all in one.
+
+## Do it safely
+Acclimatise gradually, never swim alone, use a tow float, and warm up properly afterward. Start small and let the sea become part of your week. Few habits give back so much for so little.`,
+  },
+  {
+    title: "Knots Every Sailor (and Beachgoer) Should Know",
+    img: "beachsunset",
+    excerpt:
+      "A handful of reliable knots that earn their place on any boat, board bag or beach trip.",
+    body: `You don't need to be a sailor to benefit from knowing a few good knots. The right one, tied well, is endlessly useful around the water.
+
+## The essential four
+The **bowline** makes a fixed loop that won't slip and unties easily — the king of knots. The **cleat hitch** secures a boat to a dock. Two **half hitches** fasten a line to a post or ring. The **figure-eight** stops a rope running through a block.
+
+## Why it matters
+A knot that slips at the wrong moment can lose your kit, your boat, or worse. Learning to tie a few reliably — and choosing the right one for the job — is a quiet, satisfying skill.
+
+## Practise on dry land
+Get them into muscle memory with a short length of rope at home. When you need one in wind and spray, you'll be glad you did.`,
+  },
+  {
+    title: "A Weekend of Coastal Sailing",
+    img: "beachsunset",
+    excerpt:
+      "Wind, tide and a small boat — the simple pleasure of moving under sail along the coast.",
+    body: `There are few better ways to spend a weekend than working a small boat along the coast, powered by nothing but the wind.
+
+## The rhythm of it
+Sailing forces you to slow down and pay attention — to the wind shifting, the tide turning, the next headland. There's a deep satisfaction in reading the conditions and harnessing them to go exactly where you want.
+
+## Plan around nature
+A good coastal passage is planned around tides and forecasts. Work the tide in your favour, keep an eye on the weather, and always have a safe harbour in mind. Tell someone ashore your plan.
+
+## Start small
+You don't need a yacht. A dinghy on a sheltered estuary teaches you the fundamentals — and is huge fun. Take an introductory course, learn the safety basics, and let the wind take it from there.`,
+  },
+  {
+    title: "Sunrise Swims: Why Mornings Belong to the Sea",
+    img: "swimmer",
+    excerpt:
+      "Beat the day to the water. There's something about a swim at first light that resets everything.",
+    body: `Ask anyone who swims at dawn and they'll tell you the same thing: those early minutes in the water set up the whole day.
+
+## A clean start
+The sea is at its calmest and quietest in the early morning, before the wind and the crowds. Slipping into still water as the sky lightens is a kind of reset no coffee can match.
+
+## The science of it
+Cold-water immersion and gentle exercise both lift mood and sharpen focus — combine them at sunrise and you start the day clear-headed and energised. Many swimmers find it the most reliable part of their routine.
+
+## Make it a habit
+Lay your kit out the night before, find a swim buddy, and pick a safe, familiar spot. The early alarm is the only hard part. Once you're in, you'll wonder why you ever slept in.`,
+  },
+  {
+    title: "The Off-Season Is the Best Season",
+    img: "beachsunset",
+    excerpt:
+      "When the tourists leave, the coast comes into its own. In praise of the quiet months.",
+    body: `Coastal towns transform when summer ends — and for those who stay, or visit out of season, the rewards are real.
+
+## Space to breathe
+Empty beaches, parking you can actually find, and lineups with room to move. The frantic energy of high summer gives way to something calmer and, somehow, more honest. The coast feels like itself again.
+
+## Often the best conditions
+For surfers and other watersports lovers, autumn and winter bring the biggest, cleanest swells of the year. The water's colder, but the waves are worth it — and a good wetsuit handles the rest.
+
+## A different beauty
+Wild skies, dramatic seas, and the satisfying ritual of warming up afterward. Pack layers, embrace the weather, and discover why so many of us quietly prefer the coast once the crowds have gone home.`,
+  },
+  {
+    title: "Lighthouses, Harbours and the Stories They Hold",
+    img: "beachbirds",
+    excerpt:
+      "Every working coast is full of history. A wander through the landmarks that shaped seafaring life.",
+    body: `Beyond the waves, the coast is layered with stories — written in its lighthouses, harbours and weathered old buildings.
+
+## Guardians of the coast
+Lighthouses stood for centuries as the difference between safe passage and disaster, their keepers living lonely, vital lives. Many are automated or retired now, but they remain striking monuments to a hard seafaring past.
+
+## The life of a harbour
+A working harbour is the heart of a coastal town — fishing boats, ropes and lobster pots, the smell of salt and diesel. Spend an hour watching one and you'll feel the rhythm of a community shaped entirely by the sea.
+
+## Worth exploring
+Next time you're on the coast, look beyond the beach. The headland walk to a lighthouse or a morning by the harbour wall connects you to generations who lived and worked by the same tides we play in.`,
+  },
+];
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+const slugify = (s) =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 80);
+const esc = (s) => (s == null ? "NULL" : `'${String(s).replace(/'/g, "''")}'`);
+
+const rows = POSTS.map((p) => {
+  const slug = slugify(p.title);
+  const cover = IMG[p.img];
+  if (!cover) throw new Error(`Unknown image key "${p.img}" for "${p.title}"`);
+  const seoTitle = `${p.title} | Nautical Nomads Journal`;
+  return `  (${esc(p.title)}, ${esc(slug)}, ${esc(p.body)}, ${esc(p.excerpt)}, ${esc(
+    seoTitle,
+  )}, ${esc(p.excerpt)}, ${esc(cover)}, 'draft', 'manual_url')`;
+});
+
+const sql = `-- Seed ~${POSTS.length} DRAFT journal posts (watersports topics) with curated covers.
+-- Generated by scripts/generate-blog-seed.mjs — do not edit by hand; re-run the
+-- generator instead. Drafts only; review & publish in /admin/blog. Idempotent.
+
+insert into blog_posts
+  (title, slug, body, excerpt, seo_title, seo_description, cover_image_url, status, trigger)
+values
+${rows.join(",\n")}
+on conflict (slug) do nothing;
+
+notify pgrst, 'reload schema';
+`;
+
+const out = join(ROOT, "supabase/migrations/20260609120000_seed_blog_drafts.sql");
+mkdirSync(dirname(out), { recursive: true });
+writeFileSync(out, sql);
+console.log(`Wrote ${POSTS.length} draft posts → ${out} (${sql.length} bytes)`);
