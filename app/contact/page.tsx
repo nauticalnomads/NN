@@ -16,7 +16,7 @@ export default function Contact() {
         back to you — usually within a day or two.
       </p>
       <p className="font-mono text-caption tracking-wide text-ink uppercase">
-        hello@nautical-nomads.com
+        info@nauticalnomads.com
       </p>
       <p className="text-ink/60">
         For order help, include your order number — it&apos;s on your confirmation email.

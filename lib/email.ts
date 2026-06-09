@@ -15,7 +15,7 @@ function client() {
   return new Resend(key);
 }
 
-const FROM = process.env.RESEND_FROM || "hello@nautical-nomads.com";
+const FROM = process.env.RESEND_FROM || "info@nauticalnomads.com";
 
 async function send(to: string, subject: string, html: string, text?: string) {
   const r = client();
