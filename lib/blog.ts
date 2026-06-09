@@ -146,7 +146,7 @@ export async function draftFromUrl(url: string): Promise<{
       headers: {
         // Many sites 403 a bare server-side fetch without a browser-like UA.
         "User-Agent":
-          "Mozilla/5.0 (compatible; NauticalNomadsBot/1.0; +https://nautical-nomads.com)",
+          "Mozilla/5.0 (compatible; NauticalNomadsBot/1.0; +https://nauticalnomads.com)",
         Accept: "text/html,application/xhtml+xml",
       },
     });
