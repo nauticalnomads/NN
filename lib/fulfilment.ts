@@ -187,7 +187,7 @@ export async function autoFulfilOrder(orderId: string) {
   const results: { provider: string; ok: boolean; providerOrderId?: string; error?: string }[] = [];
 
   for (const [provider, group] of byProvider) {
-    const idempotency_key = `${orderId}::${provider}`;
+    let idempotency_key = `${orderId}::${provider}`;
     // Idempotency: skip if a successful attempt already exists.
     const { data: existing } = await sb
       .from("fulfilment_attempts")
@@ -205,8 +205,10 @@ export async function autoFulfilOrder(orderId: string) {
 
     if (s.fulfilment_dry_run) {
       // No real provider call — record a synthetic attempt so the admin sees
-      // the dry-run pathway in the audit log.
+      // the dry-run pathway in the audit log. Use a non-colliding key so it
+      // never blocks a later LIVE run (flip dry_run off → re-fulfils for real).
       providerOrderId = `DRYRUN-${provider}-${orderId.slice(0, 8)}`;
+      idempotency_key = `${orderId}::${provider}::dryrun::${Date.now()}`;
     } else {
       // Retry loop — transient errors (5xx/429/network) get up to MAX_RETRIES
       // attempts with exponential backoff. Permanent 4xx errors fail immediately.

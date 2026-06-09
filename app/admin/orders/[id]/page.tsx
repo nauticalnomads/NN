@@ -102,6 +102,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     : [];
 
   const needsAttention = NEEDS_ATTENTION.includes(order.status);
+  // Orders fulfilled in dry-run mode were never sent to the provider; offer a
+  // retry so they can be placed for real once live (the retry clears the
+  // synthetic DRYRUN attempt first).
+  const hasDryRun = attempts.some((a) => (a.provider_order_id ?? "").startsWith("DRYRUN-"));
+  const showFulfilmentTools = needsAttention || hasDryRun;
   // Providers involved in this order (for the manual-fallback form).
   const providers = [...new Set(items.map((i) => i.provider).filter(Boolean))] as string[];
 
@@ -348,12 +353,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           )}
         </Section>
 
-        {/* Manual fallback + retry — only shown when attention is needed */}
-        {needsAttention && (
+        {/* Manual fallback + retry — shown when attention is needed or the order
+            was only fulfilled in dry-run mode (never sent to the provider). */}
+        {showFulfilmentTools && (
           <Section title="Manual fallback">
             <p className="font-body text-caption text-ink/60 mb-4">
-              Use this if you placed the order manually with the provider. Paste the provider
-              reference and tracking number (if you have it). Or retry auto-fulfilment below.
+              {hasDryRun && !needsAttention
+                ? "This order was processed in dry-run mode, so nothing was sent to the provider. Once live (fulfilment_dry_run off + API key set), use Retry to place it for real — the synthetic dry-run attempt is cleared first."
+                : "Use this if you placed the order manually with the provider. Paste the provider reference and tracking number (if you have it). Or retry auto-fulfilment below."}
             </p>
 
             {providers.map((prov) => (
