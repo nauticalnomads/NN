@@ -8,12 +8,14 @@ import { absoluteUrl } from "@/lib/site";
 import { getCustomer } from "@/lib/customer";
 import { markOrderPaid } from "@/lib/orders";
 import { getRedeemableCard, createPendingRedemption } from "@/lib/gift-cards";
+import { getPromoPercent } from "@/lib/promo";
 
 type Payload = {
   email: string;
   shipping_address: ShippingAddress;
   items: CartItem[];
   giftCardCode?: string;
+  promoCode?: string;
 };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -21,7 +23,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 export async function createCheckoutSession(
   payload: Payload,
 ): Promise<{ url?: string; error?: string }> {
-  const { email, shipping_address, items, giftCardCode } = payload;
+  const { email, shipping_address, items, giftCardCode, promoCode } = payload;
   if (!email || !items.length) return { error: "Missing email or items." };
 
   if (!process.env.STRIPE_SECRET_KEY) {
@@ -95,12 +97,22 @@ export async function createCheckoutSession(
   }));
 
   const shipping = await quoteShipping(cartLines, shipping_address);
-  const grossTotal = round2(subtotal + shipping.rate);
 
-  // Gift-card redemption (optional). A card covering the WHOLE order (incl.
-  // shipping) skips Stripe entirely; a partial card is applied via a one-off
-  // Stripe coupon, which only discounts line items — so partial redemptions are
-  // capped at the items subtotal (shipping is always paid by card on Stripe).
+  // Promo code (optional): percent off the items subtotal, validated
+  // server-side against lib/promo.ts (never trusted from the client).
+  let promoAmount = 0;
+  if (promoCode && promoCode.trim()) {
+    const pct = await getPromoPercent(promoCode);
+    if (pct) promoAmount = round2((subtotal * pct) / 100);
+  }
+  const discountedSubtotal = round2(subtotal - promoAmount);
+  const grossTotal = round2(discountedSubtotal + shipping.rate);
+
+  // Gift-card redemption (optional, stacks after the promo). A card covering
+  // the WHOLE remaining order (incl. shipping) skips Stripe entirely; a partial
+  // card is applied via a one-off Stripe coupon, which only discounts line
+  // items — so partial redemptions are capped at the (discounted) items
+  // subtotal (shipping is always paid by card on Stripe).
   let giftCard: { id: string; redeem: number; full: boolean } | null = null;
   if (giftCardCode && giftCardCode.trim()) {
     const card = await getRedeemableCard(giftCardCode, currencyUpper);
@@ -108,12 +120,16 @@ export async function createCheckoutSession(
       if (card.balance >= grossTotal) {
         giftCard = { id: card.id, redeem: grossTotal, full: true };
       } else {
-        giftCard = { id: card.id, redeem: round2(Math.min(card.balance, subtotal)), full: false };
+        giftCard = {
+          id: card.id,
+          redeem: round2(Math.min(card.balance, discountedSubtotal)),
+          full: false,
+        };
       }
     }
   }
-  const discountTotal = giftCard ? giftCard.redeem : 0;
-  const grandTotal = round2(grossTotal - discountTotal);
+  const discountTotal = round2(promoAmount + (giftCard ? giftCard.redeem : 0));
+  const grandTotal = round2(subtotal + shipping.rate - discountTotal);
 
   // Link to the signed-in customer if there is one (guest checkout otherwise).
   const customer = await getCustomer();
@@ -203,16 +219,19 @@ export async function createCheckoutSession(
     };
   });
 
-  // Partial gift card → one-off Stripe coupon. amount_off only ever discounts
-  // line items, and we capped giftCard.redeem at the items subtotal above, so
-  // the charged total is exactly grandTotal (= subtotal − redeem + shipping).
+  // Promo + partial gift card → ONE one-off Stripe coupon (Checkout allows a
+  // single discount). amount_off only ever discounts line items, and we capped
+  // promo + gift redemption at the items subtotal above, so the charged total
+  // is exactly grandTotal (= subtotal − discounts + shipping).
+  const stripeDiscount = round2(promoAmount + (giftCard ? giftCard.redeem : 0));
   let discounts: { coupon: string }[] | undefined;
-  if (giftCard && giftCard.redeem > 0) {
+  if (stripeDiscount > 0) {
     const coupon = await stripe.coupons.create({
-      amount_off: Math.round(giftCard.redeem * 100),
+      amount_off: Math.round(stripeDiscount * 100),
       currency,
       duration: "once",
-      name: "Gift card",
+      name:
+        giftCard && promoAmount > 0 ? "Discount + gift card" : giftCard ? "Gift card" : "Discount",
     });
     discounts = [{ coupon: coupon.id }];
   }
@@ -279,6 +298,15 @@ export async function createCheckoutSession(
     .eq("id", orderId);
 
   return { url: session.url ?? undefined };
+}
+
+// Used by the checkout form to validate a discount code before paying.
+export async function previewPromoAction(
+  code: string,
+): Promise<{ valid: boolean; percent?: number; message: string }> {
+  const pct = await getPromoPercent(code);
+  if (!pct) return { valid: false, message: "That code isn't valid." };
+  return { valid: true, percent: pct, message: `${pct}% off applied at checkout.` };
 }
 
 // Returns the URL only if it's a well-formed absolute http(s) URL — the form

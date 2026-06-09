@@ -14,8 +14,14 @@ export default function ShippingReturns() {
       <h2 className="font-display text-heading text-ink">Shipping</h2>
       <p>
         Our pieces are made to order and printed by our production partners, then sent straight to
-        you. Most orders ship within a few days; you&apos;ll get a tracking number by email when
-        yours is on its way.
+        you. Production takes <strong>2–5 business days</strong>, then delivery is typically 3–5
+        business days in the UK (longer internationally) — so allow roughly{" "}
+        <strong>5–10 business days door to door for UK orders</strong>. You&apos;ll get a tracking
+        number by email the moment yours is dispatched. Full timings are on our{" "}
+        <a className="text-accent-sun hover:underline" href="/shipping">
+          Shipping &amp; Delivery page
+        </a>
+        .
       </p>
 
       <h2 className="pt-4 font-display text-heading text-ink">Import VAT &amp; duty</h2>
