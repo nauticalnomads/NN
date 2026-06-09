@@ -93,9 +93,42 @@ platform. Test in this order; each item assumes the ones above pass.
 
 ## 2. Cutover (D-day)
 
+> **⚠️ Build-time vs runtime env vars — read this before flipping anything.**
+>
+> Three variables are **`NEXT_PUBLIC_*`** and are **baked in at build time**
+> (inlined by Next via the `env` block in `next.config.mjs`):
+>
+> - `NEXT_PUBLIC_SITE_URL` → `https://nauticalnomads.com`
+> - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` → `pk_live_…`
+> - `NEXT_PUBLIC_ALLOW_INDEXING` → `true`
+>
+> These must be set as **build environment variables** (Cloudflare → Workers →
+> the project → Settings → **Build** → Variables) **and a fresh build + deploy
+> run afterwards**. Setting them as Worker **runtime secrets** (via
+> `wrangler secret put`, or Settings → Variables and Secrets) has **no effect**
+> on these three — the value is already compiled into the bundle. Concrete
+> failure modes:
+>
+> - `pk_live_…` set only as a runtime secret → **checkout still loads the test
+>   publishable key** (payments look fine in test, never go live).
+> - `NEXT_PUBLIC_ALLOW_INDEXING` not present at build → **live site stays
+>   `noindex` + `robots: Disallow /`** → invisible to Google even after you
+>   submit the sitemap in Search Console.
+> - `NEXT_PUBLIC_SITE_URL` stale at build → canonical tags, `sitemap.xml`, and
+>   `robots.txt host` all emit the old default.
+>
+> Everything **server-only** is read at **runtime** — set these as Worker
+> secrets, no rebuild needed: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+> `RESEND_API_KEY`, `RESEND_FROM`, `OWNER_ALERT_EMAIL`, `PRINTFUL_API_KEY`,
+> `PRINTFUL_WEBHOOK_SECRET`, `PRINTIFY_*`, `CRON_SECRET`, the Supabase
+> service-role key. (POD keys/secrets can also live in `store_settings` via
+> `/admin/settings`, which takes precedence over the env fallback.)
+
 1. **Decide cutover window** (low-traffic, e.g. early Sunday morning).
-2. **Flip indexing on**: set `NEXT_PUBLIC_ALLOW_INDEXING=true` in Cloudflare.
-3. **Re-deploy** to apply the env change.
+2. **Flip indexing on**: set `NEXT_PUBLIC_ALLOW_INDEXING=true` as a **build**
+   variable in Cloudflare (see the callout above — not a runtime secret).
+3. **Re-build + re-deploy** to apply the env change (a plain restart/rollback
+   won't pick up a new `NEXT_PUBLIC_*` value — it has to be a fresh build).
 4. **DNS swap**: in Cloudflare DNS, point `nauticalnomads.com` A/AAAA + `www`
    CNAME at the new platform (or use Cloudflare Pages custom domain).
 5. **301 redirects** from old Shopify URLs → new equivalents. Map:
@@ -104,7 +137,10 @@ platform. Test in this order; each item assumes the ones above pass.
    - `/blogs/{section}/{post}` → `/journal/{slug}` (if applicable)
    - Everything else → home page (catch-all 301)
 6. **Switch Stripe to live keys**:
-   - Update `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` in Cloudflare.
+   - Update `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` as **runtime** Worker
+     secrets in Cloudflare (read at request time — no rebuild needed).
+   - Update `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` → `pk_live_…` as a **build**
+     variable, then **rebuild + redeploy** (per the callout above).
    - Update the webhook endpoint URL in Stripe dashboard if it changed.
 7. **Verify** in this order: home renders → product page → add to bag →
    checkout → live-mode purchase end-to-end → refund.
