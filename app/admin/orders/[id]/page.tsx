@@ -3,7 +3,15 @@ import { notFound } from "next/navigation";
 import { requireOps } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { formatPrice } from "@/lib/format";
-import { retryFulfilment, saveMannualFulfilment } from "./actions";
+import {
+  retryFulfilment,
+  saveMannualFulfilment,
+  markFulfilled,
+  markShipped,
+  markDelivered,
+  cancelOrder,
+  refundOrder,
+} from "./actions";
 
 type ShippingAddress = {
   name?: string;
@@ -406,6 +414,98 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 Retry auto-fulfilment
               </button>
             </form>
+          </Section>
+        )}
+
+        {/* Manual status controls (always available unless terminal). */}
+        {!["refunded", "cancelled"].includes(order.status) && (
+          <Section title="Order actions">
+            <div className="flex flex-wrap gap-2">
+              <form action={markFulfilled}>
+                <input type="hidden" name="order_id" value={order.id} />
+                <button className="rounded-sm border border-ink/30 px-4 py-2 font-mono text-xs tracking-widest text-ink uppercase hover:border-ink/60">
+                  Mark fulfilled
+                </button>
+              </form>
+              <form action={markDelivered}>
+                <input type="hidden" name="order_id" value={order.id} />
+                <button className="rounded-sm border border-ink/30 px-4 py-2 font-mono text-xs tracking-widest text-ink uppercase hover:border-ink/60">
+                  Mark delivered
+                </button>
+              </form>
+            </div>
+
+            <details className="mt-2 rounded-sm border border-ink/10">
+              <summary className="cursor-pointer px-4 py-3 font-mono text-caption tracking-wide text-ink uppercase">
+                Mark shipped (with tracking)
+              </summary>
+              <form action={markShipped} className="space-y-3 px-4 pb-4 pt-3">
+                <input type="hidden" name="order_id" value={order.id} />
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="font-mono text-caption text-ink/60 uppercase">Carrier</span>
+                    <input
+                      type="text"
+                      name="carrier"
+                      placeholder="e.g. Royal Mail"
+                      className="mt-1 block w-full rounded-sm border border-ink/20 bg-surface px-3 py-2 font-body text-caption text-ink"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="font-mono text-caption text-ink/60 uppercase">
+                      Tracking no.
+                    </span>
+                    <input
+                      type="text"
+                      name="tracking"
+                      placeholder="e.g. AB123456789GB"
+                      className="mt-1 block w-full rounded-sm border border-ink/20 bg-surface px-3 py-2 font-body text-caption text-ink"
+                    />
+                  </label>
+                </div>
+                <label className="block">
+                  <span className="font-mono text-caption text-ink/60 uppercase">
+                    Tracking URL (optional)
+                  </span>
+                  <input
+                    type="text"
+                    name="tracking_url"
+                    placeholder="https://…"
+                    className="mt-1 block w-full rounded-sm border border-ink/20 bg-surface px-3 py-2 font-body text-caption text-ink"
+                  />
+                </label>
+                <button className="rounded-sm bg-ink px-4 py-2 font-mono text-xs tracking-widest text-surface uppercase hover:bg-ink/80">
+                  Mark shipped &amp; email customer
+                </button>
+              </form>
+            </details>
+
+            <details className="mt-2 rounded-sm border border-accent-sun/30">
+              <summary className="cursor-pointer px-4 py-3 font-mono text-caption tracking-wide text-accent-sun uppercase">
+                Cancel / refund
+              </summary>
+              <div className="space-y-3 px-4 pb-4 pt-3">
+                <p className="font-body text-caption text-ink/60">
+                  Refund issues a full Stripe refund for{" "}
+                  {formatPrice(order.grand_total, order.currency)} and marks the order refunded.
+                  Cancel only stops an unshipped order — refund separately if payment was taken.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <form action={refundOrder}>
+                    <input type="hidden" name="order_id" value={order.id} />
+                    <button className="rounded-sm bg-accent-sun px-4 py-2 font-mono text-xs tracking-widest text-surface uppercase">
+                      Refund {formatPrice(order.grand_total, order.currency)}
+                    </button>
+                  </form>
+                  <form action={cancelOrder}>
+                    <input type="hidden" name="order_id" value={order.id} />
+                    <button className="rounded-sm border border-accent-sun/60 px-4 py-2 font-mono text-xs tracking-widest text-accent-sun uppercase hover:bg-accent-sun/10">
+                      Cancel order
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </details>
           </Section>
         )}
       </div>
