@@ -56,24 +56,34 @@ async function token(serviceAccountJson: string): Promise<string | null> {
   return cachedToken.token;
 }
 
+async function listFolder(folderId: string, t: string): Promise<DriveFile[]> {
+  const q = encodeURIComponent(
+    `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
+  );
+  const fields = encodeURIComponent("files(id,name,mimeType,thumbnailLink,webContentLink)");
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${fields}&pageSize=50`,
+    { headers: { Authorization: `Bearer ${t}` } },
+  );
+  if (!res.ok) return [];
+  const j = await res.json();
+  return j.files ?? [];
+}
+
 export async function listImages(): Promise<DriveFile[]> {
   const { serviceAccountJson, driveFolderId } = await getGoogleConfig();
   if (!serviceAccountJson || !driveFolderId) return [];
   const t = await token(serviceAccountJson);
   if (!t) return [];
-  const q = encodeURIComponent(
-    `'${driveFolderId}' in parents and mimeType contains 'image/' and trashed = false`,
-  );
-  const fields = encodeURIComponent("files(id,name,mimeType,thumbnailLink,webContentLink)");
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${fields}&pageSize=50`,
-    {
-      headers: { Authorization: `Bearer ${t}` },
-    },
-  );
-  if (!res.ok) return [];
-  const j = await res.json();
-  return j.files ?? [];
+  return listFolder(driveFolderId, t);
+}
+
+export async function listEmailCoverImages(): Promise<DriveFile[]> {
+  const { serviceAccountJson, emailCoversFolderId } = await getGoogleConfig();
+  if (!serviceAccountJson || !emailCoversFolderId) return [];
+  const t = await token(serviceAccountJson);
+  if (!t) return [];
+  return listFolder(emailCoversFolderId, t);
 }
 
 // Public URL the AI can fetch the image from. uc?export=view works for files

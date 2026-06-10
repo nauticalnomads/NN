@@ -13,6 +13,7 @@ export type IntegrationConfig = {
 export type GoogleConfig = {
   serviceAccountJson: string;
   driveFolderId: string;
+  emailCoversFolderId: string;
 };
 
 export async function getIntegrationConfig(): Promise<IntegrationConfig> {
@@ -67,6 +68,7 @@ export async function getGoogleConfig(): Promise<GoogleConfig> {
   // Cloudflare Workers runtime (same constraint as getIntegrationConfig above).
   const envJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "";
   const envFolder = process.env.GOOGLE_DRIVE_FOLDER_ID ?? "";
+  const envCovers = process.env.EMAIL_COVERS_FOLDER_ID ?? "";
   const pick = (col: string, envVal: string): string => {
     const v = row[col];
     if (typeof v === "string" && v.trim()) return v.trim();
@@ -75,6 +77,7 @@ export async function getGoogleConfig(): Promise<GoogleConfig> {
   return {
     serviceAccountJson: pick("google_service_account_json", envJson),
     driveFolderId: pick("google_drive_folder_id", envFolder),
+    emailCoversFolderId: pick("email_covers_folder_id", envCovers),
   };
 }
 
