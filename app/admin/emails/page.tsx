@@ -1,7 +1,13 @@
+import Image from "next/image";
 import { requireOps } from "@/lib/auth";
-import { getAdminTemplates, type AdminTemplate } from "@/lib/email-templates";
+import {
+  getAdminTemplates,
+  getEmailBranding,
+  type AdminTemplate,
+  type EmailBranding,
+} from "@/lib/email-templates";
 import { SubmitButton } from "@/components/admin/SubmitButton";
-import { saveTemplate, resetTemplate, sendTest } from "./actions";
+import { saveTemplate, resetTemplate, sendTest, saveEmailBranding } from "./actions";
 
 export default async function AdminEmails({
   searchParams,
@@ -10,7 +16,7 @@ export default async function AdminEmails({
 }) {
   await requireOps();
   const { status } = await searchParams;
-  const templates = await getAdminTemplates();
+  const [templates, branding] = await Promise.all([getAdminTemplates(), getEmailBranding()]);
 
   return (
     <div className="max-w-3xl">
@@ -23,6 +29,8 @@ export default async function AdminEmails({
       </p>
 
       <StatusBanner status={status} />
+
+      <EmailBrandingCard branding={branding} />
 
       <div className="mt-8 space-y-12">
         {templates.map((t) => (
@@ -43,6 +51,84 @@ alter table email_templates enable row level security;
 notify pgrst, 'reload schema';`}</pre>
       </details>
     </div>
+  );
+}
+
+function EmailBrandingCard({ branding }: { branding: EmailBranding }) {
+  return (
+    <section className="mt-8 rounded-sm border border-ink/10 bg-surface-2 p-6">
+      <h2 className="font-display text-heading text-ink">Email branding</h2>
+      <p className="mt-1 font-body text-caption text-ink/60">
+        The logo sits at the top of every email; covers show as a banner under it and{" "}
+        <strong>rotate</strong> (one picked per send). Wide landscape images (about 1200×460) work
+        best for covers; a transparent PNG works best for the logo.
+      </p>
+
+      <form action={saveEmailBranding} className="mt-5 space-y-6">
+        {/* Logo */}
+        <div>
+          <p className="font-mono text-caption tracking-wide text-ink/60 uppercase">Logo</p>
+          <div className="mt-2 flex flex-wrap items-center gap-4">
+            {branding.logo_url && (
+              <span className="relative block h-12 w-44 overflow-hidden rounded-sm border border-ink/10 bg-surface">
+                <Image
+                  src={branding.logo_url}
+                  alt="Current logo"
+                  fill
+                  sizes="176px"
+                  className="object-contain"
+                />
+              </span>
+            )}
+            <input
+              type="file"
+              name="logo"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              className="font-body text-caption text-ink/70 file:mr-3 file:rounded-sm file:border-0 file:bg-ink file:px-3 file:py-1.5 file:font-mono file:text-xs file:tracking-widest file:text-surface file:uppercase"
+            />
+            {branding.logo_url && (
+              <label className="flex items-center gap-2 font-mono text-caption text-ink/60">
+                <input type="checkbox" name="remove_logo" /> Remove logo
+              </label>
+            )}
+          </div>
+        </div>
+
+        {/* Covers */}
+        <div>
+          <p className="font-mono text-caption tracking-wide text-ink/60 uppercase">
+            Cover images ({branding.cover_urls.length})
+          </p>
+          {branding.cover_urls.length > 0 && (
+            <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {branding.cover_urls.map((url) => (
+                <label key={url} className="block cursor-pointer">
+                  <span className="relative block aspect-[1200/460] overflow-hidden rounded-sm border border-ink/10 bg-surface">
+                    <Image src={url} alt="Cover" fill sizes="240px" className="object-cover" />
+                  </span>
+                  <span className="mt-1 flex items-center gap-2 font-mono text-caption text-ink/60">
+                    <input type="checkbox" name="remove_cover" value={url} /> Remove
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+          <input
+            type="file"
+            name="cover"
+            accept="image/png,image/jpeg,image/webp"
+            multiple
+            className="mt-3 block font-body text-caption text-ink/70 file:mr-3 file:rounded-sm file:border-0 file:bg-ink file:px-3 file:py-1.5 file:font-mono file:text-xs file:tracking-widest file:text-surface file:uppercase"
+          />
+          <p className="mt-1 font-mono text-caption text-ink/40">
+            Select multiple to add several at once. They&apos;re stored full-size — keep each under
+            a few hundred KB so emails stay light.
+          </p>
+        </div>
+
+        <SubmitButton>Save branding</SubmitButton>
+      </form>
+    </section>
   );
 }
 

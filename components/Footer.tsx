@@ -50,19 +50,9 @@ const Instagram = () => (
     <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
   </svg>
 );
-const TikTok = () => (
-  <svg className={soc} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M16 3c.3 2.2 1.7 3.9 3.9 4.2v2.6c-1.4 0-2.7-.4-3.9-1.1v5.7a5.4 5.4 0 1 1-5.4-5.4c.3 0 .6 0 .9.1v2.7a2.7 2.7 0 1 0 1.9 2.6V3H16Z" />
-  </svg>
-);
 const Facebook = () => (
   <svg className={soc} viewBox="0 0 24 24" fill="currentColor">
     <path d="M14 9V7c0-.9.6-1 1-1h2V3h-3c-2.2 0-3 1.6-3 3.3V9H8v3h3v9h3v-9h2.5l.5-3h-3Z" />
-  </svg>
-);
-const Pinterest = () => (
-  <svg className={soc} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M12 2a10 10 0 0 0-3.6 19.3c-.1-.8-.2-2 0-2.9l1.2-5s-.3-.6-.3-1.5c0-1.4.8-2.4 1.8-2.4.9 0 1.3.6 1.3 1.4 0 .9-.5 2.2-.8 3.4-.2.9.5 1.7 1.5 1.7 1.8 0 3-2.3 3-5 0-2-1.4-3.6-3.9-3.6a4.3 4.3 0 0 0-4.5 4.3c0 .9.3 1.5.7 2 .2.2.2.3.1.5l-.2.9c-.1.3-.3.4-.5.2-1.2-.5-1.8-1.9-1.8-3.5 0-2.6 2.2-5.7 6.5-5.7 3.5 0 5.8 2.5 5.8 5.2 0 3.5-2 6.2-4.9 6.2-1 0-1.9-.5-2.2-1.1l-.6 2.4c-.2.8-.7 1.7-1 2.3A10 10 0 1 0 12 2Z" />
   </svg>
 );
 const YouTube = () => (
@@ -72,11 +62,9 @@ const YouTube = () => (
 );
 
 const SOCIALS = [
-  { label: "Instagram", href: "https://instagram.com", Icon: Instagram },
-  { label: "TikTok", href: "https://tiktok.com", Icon: TikTok },
-  { label: "Facebook", href: "https://facebook.com", Icon: Facebook },
-  { label: "Pinterest", href: "https://pinterest.com", Icon: Pinterest },
-  { label: "YouTube", href: "https://youtube.com", Icon: YouTube },
+  { label: "Instagram", href: "https://www.instagram.com/thenauticalnomads/", Icon: Instagram },
+  { label: "Facebook", href: "https://www.facebook.com/thenauticalnomad", Icon: Facebook },
+  { label: "YouTube", href: "https://www.youtube.com/@nauticalnomads1", Icon: YouTube },
 ];
 
 const LEGAL = [

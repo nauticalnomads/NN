@@ -15,7 +15,10 @@ function client() {
   return new Resend(key);
 }
 
-const FROM = process.env.RESEND_FROM || "info@nauticalnomads.com";
+// Display name on the "From" so inboxes show "Nautical Nomads", not "info".
+// Respects a RESEND_FROM that already includes a display name ("Name <addr>").
+const FROM_RAW = process.env.RESEND_FROM || "info@nauticalnomads.com";
+const FROM = FROM_RAW.includes("<") ? FROM_RAW : `Nautical Nomads <${FROM_RAW}>`;
 
 async function send(to: string, subject: string, html: string, text?: string) {
   const r = client();
@@ -186,6 +189,37 @@ export async function sendNewsletterWelcome(email: string, code: string) {
     code,
     shop_url: absoluteUrl("/shop"),
   });
+}
+
+// ── CAREERS APPLICATION (to owner, with CV/cover attachments) ────────────────
+// Files are emailed rather than stored: the only storage bucket is public and
+// CVs are personal data. No Resend configured → returns false so the caller
+// can tell the applicant to email directly instead of silently dropping it.
+export async function sendCareersApplication(app: {
+  name: string;
+  email: string;
+  message: string;
+  attachments: { filename: string; content: string }[]; // base64
+}): Promise<boolean> {
+  const r = client();
+  const to = process.env.OWNER_ALERT_EMAIL || process.env.RESEND_FROM;
+  if (!r || !to) {
+    console.warn("Resend/owner email not configured; careers application not sent");
+    return false;
+  }
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const html = `<p><strong>Careers application</strong></p>
+<p>Name: ${esc(app.name)}<br/>Email: ${esc(app.email)}</p>
+<p style="white-space:pre-wrap">${esc(app.message)}</p>`;
+  const res = await r.emails.send({
+    from: FROM,
+    to,
+    replyTo: app.email,
+    subject: `Careers application — ${app.name}`,
+    html,
+    attachments: app.attachments,
+  });
+  return !res.error;
 }
 
 // ── GIFT CARD DELIVERY (to purchaser, after payment) ─────────────────────────

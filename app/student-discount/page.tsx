@@ -1,44 +1,40 @@
 import type { Metadata } from "next";
-import { Prose } from "@/components/Prose";
+import { Container } from "@/components/Container";
 import { absoluteUrl } from "@/lib/site";
+import { RevealForm } from "./RevealForm";
 
 export const metadata: Metadata = {
   title: "Student Discount",
-  description: "10% off for students, all year round.",
+  description: "5% off for students, all year round — verify with your university email.",
   alternates: { canonical: absoluteUrl("/student-discount") },
 };
 
 export default function StudentDiscount() {
   return (
-    <Prose title="Student Discount">
-      <p>
-        Student budgets are tight and good kit shouldn&apos;t be out of reach — so students get
-        <strong> 10% off</strong> everything in the shop, all year round.
-      </p>
-
-      <h2 className="font-display text-heading text-ink">How it works</h2>
-      <ol className="list-decimal space-y-1 pl-5">
-        <li>Email us from your student (.ac.uk or .edu) address, or include proof of enrolment.</li>
-        <li>We&apos;ll reply with a single-use discount code for 10% off your order.</li>
-        <li>Enter the code at checkout — it applies to the whole bag.</li>
-      </ol>
-
-      <h2 className="font-display text-heading text-ink">The small print</h2>
-      <ul className="list-disc space-y-1 pl-5">
-        <li>
-          One code per customer; can&apos;t be combined with other offers or gift-card top-ups.
-        </li>
-        <li>Valid while you&apos;re enrolled in full- or part-time study.</li>
-        <li>We may ask to re-verify from time to time.</li>
-      </ul>
-
-      <p className="text-ink/70">
-        Ready to claim it? Email{" "}
-        <span className="font-mono text-caption tracking-wide text-ink uppercase">
-          info@nauticalnomads.com
-        </span>{" "}
-        with the subject &ldquo;Student discount&rdquo; and we&apos;ll sort you out.
-      </p>
-    </Prose>
+    <Container className="py-16">
+      <div className="grid items-start gap-12 md:grid-cols-2">
+        <div>
+          <p className="font-mono text-xs tracking-[0.3em] text-accent-sea uppercase">Students</p>
+          <h1 className="mt-4 font-display text-display-2 tracking-tight text-deep-ink">
+            5% off, all year round
+          </h1>
+          <p className="mt-4 font-body text-body leading-relaxed text-ink/75">
+            Student budgets are tight and good kit shouldn&apos;t be out of reach. Pop in your
+            university email, get your code instantly, and use it on anything in the shop.
+          </p>
+          <ul className="mt-6 space-y-2 font-body text-body text-ink/70">
+            <li>· Works on everything, every day</li>
+            <li>· Instant — no sign-up, no third-party verification</li>
+            <li>· One use per order; not combinable with other offers</li>
+          </ul>
+          <p className="mt-6 font-body text-caption text-ink/50">
+            No university email but still studying? Email{" "}
+            <span className="font-mono uppercase">info@nauticalnomads.com</span> with proof of
+            enrolment and we&apos;ll send you the code.
+          </p>
+        </div>
+        <RevealForm />
+      </div>
+    </Container>
   );
 }
