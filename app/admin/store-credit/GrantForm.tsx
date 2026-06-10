@@ -54,9 +54,7 @@ export function GrantForm() {
         {pending ? "Granting…" : "Grant credit"}
       </button>
       {state && (
-        <p
-          className={`font-mono text-caption ${state.ok ? "text-accent-sea" : "text-accent-sun"}`}
-        >
+        <p className={`font-mono text-caption ${state.ok ? "text-accent-sea" : "text-accent-sun"}`}>
           {state.message}
         </p>
       )}

@@ -137,9 +137,7 @@ export async function createCheckoutSession(
 
   const creditPool = round2(giftBalance + storeCreditAvailable);
   const fullyCovered = creditPool >= grossTotal;
-  const creditToUse = fullyCovered
-    ? grossTotal
-    : round2(Math.min(creditPool, discountedSubtotal));
+  const creditToUse = fullyCovered ? grossTotal : round2(Math.min(creditPool, discountedSubtotal));
   // Allocate: gift card first, then store credit.
   const giftRedeem = round2(Math.min(giftBalance, creditToUse));
   const storeCreditRedeem = round2(creditToUse - giftRedeem);

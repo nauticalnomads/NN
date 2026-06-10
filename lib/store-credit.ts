@@ -47,10 +47,7 @@ type LedgerRow = {
 
 // A customer's spendable balance in `currency` = sum of `applied` rows. Returns
 // 0 (never throws) so callers/UI degrade gracefully before the migration runs.
-export async function getAvailableCredit(
-  customerId: string,
-  currency = "GBP",
-): Promise<number> {
+export async function getAvailableCredit(customerId: string, currency = "GBP"): Promise<number> {
   try {
     const sb = createServiceClient();
     const { data } = await sb
@@ -74,7 +71,14 @@ export async function getCreditLedger(
   customerId: string,
   limit = 50,
 ): Promise<
-  Array<{ id: string; amount: number; currency: string; reason: string; note: string | null; created_at: string }>
+  Array<{
+    id: string;
+    amount: number;
+    currency: string;
+    reason: string;
+    note: string | null;
+    created_at: string;
+  }>
 > {
   try {
     const sb = createServiceClient();
@@ -252,11 +256,19 @@ export async function getCreditAppliedToOrder(orderId: string): Promise<number> 
   }
 }
 
-type CustomerLite = { id: string; email: string; referral_code: string | null; referred_by: string | null };
+type CustomerLite = {
+  id: string;
+  email: string;
+  referral_code: string | null;
+  referred_by: string | null;
+};
 
 // Return a customer's referral code, generating + persisting one on first use
 // (legacy rows created before this feature have none). Retries on code clash.
-export async function ensureReferralCode(customer: { id: string; referral_code?: string | null }): Promise<string | null> {
+export async function ensureReferralCode(customer: {
+  id: string;
+  referral_code?: string | null;
+}): Promise<string | null> {
   if (customer.referral_code) return customer.referral_code;
   const sb = createServiceClient();
   for (let i = 0; i < 5; i++) {
@@ -335,7 +347,10 @@ export async function processStoreCreditForOrder(orderId: string): Promise<void>
   // 2) Loyalty: earn on net cash paid toward merchandise (grand_total less
   // shipping, clamped ≥ 0). Paying entirely with credit earns nothing, so
   // credit can't be farmed by churning it.
-  const merchandiseCash = Math.max(0, round2(Number(order.grand_total) - Number(order.shipping_total)));
+  const merchandiseCash = Math.max(
+    0,
+    round2(Number(order.grand_total) - Number(order.shipping_total)),
+  );
   const earn = round2((merchandiseCash * LOYALTY_EARN_PERCENT) / 100);
   if (earn > 0) {
     await grantCredit({

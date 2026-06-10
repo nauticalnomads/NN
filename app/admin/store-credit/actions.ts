@@ -21,11 +21,7 @@ export async function grantStoreCredit(
   if (!(amount > 0)) return { ok: false, message: "Enter an amount greater than zero." };
 
   const sb = createServiceClient();
-  const { data } = await sb
-    .from("customers")
-    .select("id, email")
-    .eq("email", email)
-    .maybeSingle();
+  const { data } = await sb.from("customers").select("id, email").eq("email", email).maybeSingle();
   const customer = data as unknown as { id: string; email: string } | null;
   if (!customer) {
     return { ok: false, message: `No customer account found for ${email}.` };

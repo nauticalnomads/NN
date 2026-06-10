@@ -646,7 +646,7 @@ Migration `20260610120000_loyalty_store_credit.sql` adds a `store_credit_transac
 ledger (service-role only, like gift cards) plus `referral_code`/`referred_by` on customers.
 Domain logic in `lib/store-credit.ts`:
 
-- **Earn (loyalty):** 5% back as store credit on the net *cash* spent on merchandise
+- **Earn (loyalty):** 5% back as store credit on the net _cash_ spent on merchandise
   (`grand_total − shipping`, clamped ≥ 0) — paying entirely with credit earns nothing, so it
   can't be farmed. Granted in `markOrderPaid` side effects, idempotent per (order, reason).
 - **Referral:** every account gets a shareable link (`/r/CODE` → drops a 60-day cookie →
