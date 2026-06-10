@@ -660,3 +660,28 @@ Domain logic in `lib/store-credit.ts`:
 
 Balance = sum of `applied` rows; redemptions are negative `pending` rows flipped to `applied`
 on payment. Reads degrade to 0/empty before the migration is applied, so build/runtime are safe.
+
+### Social scheduling ✅
+
+`/admin/social` could only post drafts immediately; the `social_drafts.scheduled_at` column
+(+ the `scheduled` enum value) existed but was unused. Wired it up end to end:
+
+- **Schedule:** each draft gets a date/time picker → `scheduleDraft` sets `status = 'scheduled'`
+  - `scheduled_at`. Scheduled posts show their time with **Post now** / **Unschedule** controls.
+- **Dispatch:** new `/api/cron/social` (CRON_SECRET-gated, same as abandoned-cart) finds
+  `scheduled` rows whose `scheduled_at` has passed and publishes each via the Make.com webhook.
+- **Shared publish path:** extracted `lib/social.ts → dispatchSocialPost(id)`, used by both the
+  manual **Post now** button and the cron. It CAS-guards on status (`draft`/`scheduled` only),
+  so a cron/manual race or double cron fire can't double-post; a failed webhook drops to `failed`.
+- **Cron wiring:** `worker.js` `scheduled()` now replays internal authenticated POSTs to BOTH
+  `/api/cron/abandoned-cart` and `/api/cron/social` on the existing hourly Cloudflare trigger —
+  no new trigger or env needed.
+
+Note: granularity is the cron cadence (hourly), so a post scheduled for 14:20 goes out at the
+top of the next hour. Tighten `wrangler.jsonc` `triggers.crons` if finer timing is needed.
+
+### Wishlist ✅ (was already built; REDESIGN box now ticked)
+
+Verified complete: `components/wishlist/WishlistProvider.tsx` (guest localStorage → server merge
+on sign-in), `/api/wishlist` (GET/POST/DELETE + batch merge, RLS `wishlists_self`),
+`/api/products/by-ids`, header + ProductCard hearts, and the `/wishlist` page/grid.

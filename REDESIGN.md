@@ -27,7 +27,7 @@ Schema reconciliations (existing repo vs v2 SQL):
 4. ✅ Homepage — hero collage + featured carousel + 3-col banner + campaign title + photo strip + New Arrivals tiles (all CMS-driven, Driftwood placeholders).
 5. ✅ Admin CMS — "Homepage & Content" tab (hero/carousel/banner/campaign/strip/tiles/mega/footer-tags/newsletter managers, uploads to cms-assets) + "Collections" tab (list, edit+assign, bulk tagger). 47 taxonomy collections seeded as drafts.
 6. ✅ PLP & product card — collection hero + sub-nav tabs + client filter sidebar (colour/size/price/sort) + result count + quick-add hover + NEW badge + wishlist heart; empty collections show graceful coming-soon.
-7. ⬜ Wishlist — endpoints + header/card/page, guest localStorage + merge on sign-in.
+7. ✅ Wishlist — `/api/wishlist` + `/api/products/by-ids`, header/card heart + `/wishlist` page, guest localStorage + merge on sign-in (WishlistProvider).
 8. ✅ Static pages — shipping, returns, sustainability, privacy, terms-of-sale, terms-of-use, cookies, gift-cards (CTA shell), ambassadors (CMS grid), help (contact form -> /api/contact + CMS FAQ accordion). About/contact/size-guide/journal already existed; 404 already branded.
 9. ✅ QA — live route sweep (24 routes incl. 404), no regressions (PDP/cart/checkout 200, admin gated 307, health green), WCAG AA contrast pass (found 4 failing brand pairs, added accessible --accent-sun-text #a8492e + --meta-on-light #7e6444 tokens for small text/CTAs on light surfaces; large/decorative Terracotta retained). typecheck/lint/build clean.
 
