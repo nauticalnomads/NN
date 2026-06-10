@@ -11,18 +11,27 @@ import { createServiceClient } from "@/lib/supabase/service";
 export async function saveIntegrations(formData: FormData) {
   await requireOps();
   const sb = createServiceClient();
-  const fields = [
+  // Write-only secret fields: only update when a new value is provided.
+  const secretFields = [
     "printful_api_key",
     "printful_store_id",
     "printful_webhook_secret",
     "printify_api_key",
     "printify_shop_id",
     "printify_webhook_secret",
+    "google_service_account_json",
   ];
-  const patch: Record<string, string> = {};
-  for (const f of fields) {
+  // Plain fields: always save (empty string clears the value).
+  const plainFields = ["google_drive_folder_id", "make_webhook_url"];
+
+  const patch: Record<string, string | null> = {};
+  for (const f of secretFields) {
     const v = String(formData.get(f) || "").trim();
     if (v) patch[f] = v;
+  }
+  for (const f of plainFields) {
+    const v = String(formData.get(f) || "").trim();
+    patch[f] = v || null;
   }
   if (Object.keys(patch).length === 0) {
     redirect("/admin/settings?integrations=saved");
@@ -87,7 +96,6 @@ export async function updateSettings(formData: FormData) {
     vat_enabled: formData.get("vat_enabled") === "on",
     vat_rate: Number(formData.get("vat_rate") || 0),
     brand_voice: String(formData.get("brand_voice") || ""),
-    make_webhook_url: String(formData.get("make_webhook_url") || "").trim() || null,
     notification_prefs: {
       fulfilment_failed: formData.get("notify_fulfilment_failed") === "on",
       refund_requested: formData.get("notify_refund_requested") === "on",
