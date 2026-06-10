@@ -29,19 +29,21 @@ export type EmailTemplateDef = {
   vars: EmailVar[];
 };
 
-// Shared shell. {{heading}} and {{body}} are filled by the rendered email; the
-// rest are site constants. Kept visually identical to the original code shell.
-const LAYOUT_DEFAULT = `<!doctype html><html><head><meta charset="utf-8"><title>{{heading}}</title></head>
+// Shared shell. {{heading}} and {{body}} are filled by the rendered email;
+// {{logo_block}} and {{cover_block}} are built from the admin "Email branding"
+// images (Admin → Emails); the rest are site constants.
+const LAYOUT_DEFAULT = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{heading}}</title></head>
 <body style="margin:0;background:#FAF6EC;font-family:-apple-system,BlinkMacSystemFont,Helvetica,sans-serif;color:#2A2826;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#FAF6EC;padding:40px 0">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#FAF6EC;padding:32px 0">
     <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="background:#FAF6EC">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#FAF6EC;width:560px;max-width:100%">
+        <tr><td style="padding:8px 24px 0">{{logo_block}}</td></tr>
+        {{cover_block}}
         <tr><td style="padding:0 24px">
-          <p style="margin:0;font-size:11px;letter-spacing:0.3em;text-transform:uppercase;color:#4A6B85">Nautical Nomads</p>
-          <h1 style="margin:14px 0 0;font-size:30px;line-height:1.15;color:#2A2826;font-weight:500">{{heading}}</h1>
-          <div style="margin-top:24px;font-size:16px;line-height:1.6;color:#2A2826">{{body}}</div>
+          <h1 style="margin:24px 0 0;font-size:30px;line-height:1.15;color:#2A2826;font-weight:500">{{heading}}</h1>
+          <div style="margin-top:20px;font-size:16px;line-height:1.6;color:#2A2826">{{body}}</div>
           <hr style="border:none;border-top:1px solid rgba(42,40,38,0.1);margin:40px 0 24px"/>
-          <p style="font-size:12px;color:rgba(42,40,38,0.5);margin:0">{{site_name}} · Live by the tide · {{site_url}}</p>
+          <p style="font-size:12px;color:rgba(42,40,38,0.5);margin:0">{{site_name}} · Live by the tide · <a href="{{site_url}}" style="color:rgba(42,40,38,0.5)">{{site_url}}</a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -69,6 +71,16 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
       { name: "body", description: "The rendered email content.", sample: "<p>…</p>" },
       { name: "site_name", description: "Store name.", sample: site.name },
       { name: "site_url", description: "Store URL.", sample: site.url },
+      {
+        name: "logo_block",
+        description: "Logo image (or wordmark) — set the image in 'Email branding' above.",
+        sample: "",
+      },
+      {
+        name: "cover_block",
+        description: "Optional cover banner row — set the image in 'Email branding' above.",
+        sample: "",
+      },
     ],
   },
   {
@@ -289,12 +301,59 @@ function resolve(def: EmailTemplateDef, o: Override | undefined) {
   };
 }
 
-function wrapLayout(heading: string, body: string, layoutBody: string): string {
+export type EmailBranding = { logo_url: string | null; cover_urls: string[] };
+
+// Admin-set logo + cover images for emails (Admin → Emails → Email branding),
+// stored in the cms_content key "email.branding". Covers rotate (one picked per
+// email). Falls back to defaults so emails keep rendering (text wordmark, no
+// cover) before anything is set. Tolerates the legacy single `cover_url` shape.
+export async function getEmailBranding(): Promise<EmailBranding> {
+  try {
+    const sb = createServiceClient();
+    const { data } = await sb
+      .from("cms_content")
+      .select("value")
+      .eq("key", "email.branding")
+      .maybeSingle();
+    const v =
+      (
+        data as unknown as {
+          value: { logo_url?: string; cover_urls?: string[]; cover_url?: string };
+        } | null
+      )?.value ?? {};
+    const covers = Array.isArray(v.cover_urls)
+      ? v.cover_urls.filter((u): u is string => !!u)
+      : v.cover_url
+        ? [v.cover_url]
+        : [];
+    return { logo_url: v.logo_url ?? null, cover_urls: covers };
+  } catch {
+    return { logo_url: null, cover_urls: [] };
+  }
+}
+
+function wrapLayout(
+  heading: string,
+  body: string,
+  layoutBody: string,
+  branding: EmailBranding = { logo_url: null, cover_urls: [] },
+): string {
+  const logo_block = branding.logo_url
+    ? `<img src="${branding.logo_url}" alt="${site.name}" height="56" style="display:block;height:56px;width:auto;max-width:300px;border:0" />`
+    : `<p style="margin:0;font-size:22px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#2A2826">${site.name}</p>`;
+  const cover = branding.cover_urls.length
+    ? branding.cover_urls[Math.floor(Math.random() * branding.cover_urls.length)]
+    : null;
+  const cover_block = cover
+    ? `<tr><td style="padding:20px 24px 0"><img src="${cover}" alt="" width="512" style="display:block;width:100%;height:auto;border:0;border-radius:8px" /></td></tr>`
+    : "";
   return interpolate(layoutBody, {
     heading,
     body,
     site_name: site.name,
     site_url: site.url,
+    logo_block,
+    cover_block,
   });
 }
 
@@ -306,13 +365,16 @@ export async function renderEmail(
 ): Promise<{ subject: string; html: string }> {
   const def = BY_KEY.get(key);
   if (!def) throw new Error(`Unknown email template: ${key}`);
-  const overrides = await loadOverrides([key, LAYOUT_KEY]);
+  const [overrides, branding] = await Promise.all([
+    loadOverrides([key, LAYOUT_KEY]),
+    getEmailBranding(),
+  ]);
   const r = resolve(def, overrides[key]);
   const subject = interpolate(r.subject, vars);
   const heading = interpolate(r.heading, vars);
   const body = interpolate(r.body, vars);
   const layoutBody = resolve(BY_KEY.get(LAYOUT_KEY)!, overrides[LAYOUT_KEY]).body;
-  return { subject, html: wrapLayout(heading, body, layoutBody) };
+  return { subject, html: wrapLayout(heading, body, layoutBody, branding) };
 }
 
 export function sampleVarsFor(key: string): Record<string, string> {
@@ -337,7 +399,10 @@ export type AdminTemplate = {
 
 // Everything the admin Emails tab needs, in a single DB round-trip.
 export async function getAdminTemplates(): Promise<AdminTemplate[]> {
-  const overrides = await loadOverrides(EMAIL_TEMPLATES.map((t) => t.key));
+  const [overrides, branding] = await Promise.all([
+    loadOverrides(EMAIL_TEMPLATES.map((t) => t.key)),
+    getEmailBranding(),
+  ]);
   const layoutBody = resolve(BY_KEY.get(LAYOUT_KEY)!, overrides[LAYOUT_KEY]).body;
   return EMAIL_TEMPLATES.map((def) => {
     const o = overrides[def.key];
@@ -347,8 +412,8 @@ export async function getAdminTemplates(): Promise<AdminTemplate[]> {
     const heading = interpolate(r.heading, sample);
     const preview =
       def.key === LAYOUT_KEY
-        ? wrapLayout("Heading goes here", "<p>Body content goes here.</p>", r.body)
-        : wrapLayout(heading, body, layoutBody);
+        ? wrapLayout("Heading goes here", "<p>Body content goes here.</p>", r.body, branding)
+        : wrapLayout(heading, body, layoutBody, branding);
     return {
       def,
       subject: r.subject,

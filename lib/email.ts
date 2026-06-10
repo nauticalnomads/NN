@@ -15,7 +15,10 @@ function client() {
   return new Resend(key);
 }
 
-const FROM = process.env.RESEND_FROM || "info@nauticalnomads.com";
+// Display name on the "From" so inboxes show "Nautical Nomads", not "info".
+// Respects a RESEND_FROM that already includes a display name ("Name <addr>").
+const FROM_RAW = process.env.RESEND_FROM || "info@nauticalnomads.com";
+const FROM = FROM_RAW.includes("<") ? FROM_RAW : `Nautical Nomads <${FROM_RAW}>`;
 
 async function send(to: string, subject: string, html: string, text?: string) {
   const r = client();
