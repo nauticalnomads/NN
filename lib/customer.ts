@@ -1,6 +1,8 @@
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendWelcome } from "@/lib/email";
+import { ensureReferralCode, linkReferral } from "@/lib/store-credit";
 
 export type Customer = {
   id: string;
@@ -86,6 +88,25 @@ export async function ensureCustomer(): Promise<{ customer: Customer | null; cre
     .update({ customer_id: customer.id } as never)
     .eq("email", user.email)
     .is("customer_id", null);
+
+  // Loyalty: give the new account a referral code, and — if they arrived via a
+  // referral link — record who referred them (reward paid on their first order).
+  await ensureReferralCode(customer).catch(() => undefined);
+  try {
+    const jar = await cookies();
+    const ref = jar.get("nn_ref")?.value;
+    if (ref) {
+      await linkReferral(customer.id, ref);
+      // Best-effort clear; throws in a pure RSC scope (no response to write to).
+      try {
+        jar.delete("nn_ref");
+      } catch {
+        /* not in a writable context — harmless, cookie just expires */
+      }
+    }
+  } catch {
+    /* no request scope (e.g. scripts) — skip referral linking */
+  }
 
   // Welcome email (fire-and-forget; never blocks sign-in).
   sendWelcome(user.email, customer.full_name ?? undefined).catch(() => undefined);

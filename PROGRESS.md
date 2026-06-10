@@ -639,3 +639,24 @@ Stops once paid; bounded so a genuinely failed payment doesn't poll forever.
 
 `audit_log` migration applied; verified table + insert path + ops-only RLS (anon blocked).
 Settings changes now record actor + from→to and surface in the settings trail.
+
+### Loyalty — account-based store credit + referrals ✅ (needs the store_credit migration run)
+
+Migration `20260610120000_loyalty_store_credit.sql` adds a `store_credit_transactions`
+ledger (service-role only, like gift cards) plus `referral_code`/`referred_by` on customers.
+Domain logic in `lib/store-credit.ts`:
+
+- **Earn (loyalty):** 5% back as store credit on the net *cash* spent on merchandise
+  (`grand_total − shipping`, clamped ≥ 0) — paying entirely with credit earns nothing, so it
+  can't be farmed. Granted in `markOrderPaid` side effects, idempotent per (order, reason).
+- **Referral:** every account gets a shareable link (`/r/CODE` → drops a 60-day cookie →
+  `ensureCustomer` records `referred_by` on sign-up). On the referred customer's **first** paid
+  order both parties get £10 credit (once ever, guarded by an existing `referral_referee` row).
+- **Redeem:** account-based — a checkbox at checkout applies the balance like a gift card
+  (reserve at checkout → settle on payment, capped to live balance so concurrent checkouts
+  can't overspend; spent after gift card, before Stripe). Fully-covered orders skip Stripe.
+- **Surfaces:** account page shows balance + ledger + referral link; admin → Store credit lists
+  the ledger and grants credit manually; `store_credit_added` email (editable) fires on each grant.
+
+Balance = sum of `applied` rows; redemptions are negative `pending` rows flipped to `applied`
+on payment. Reads degrade to 0/empty before the migration is applied, so build/runtime are safe.

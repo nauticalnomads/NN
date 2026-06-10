@@ -255,6 +255,33 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
       { name: "shop_url", description: "Link to the shop.", sample: site.url + "/shop" },
     ],
   },
+  {
+    key: "store_credit_added",
+    label: "Store credit added",
+    description:
+      "Sent when store credit lands in a customer's account — loyalty reward, referral, or a manual grant.",
+    defaultSubject: "You've got {{amount}} in store credit",
+    defaultHeading: "Store credit added",
+    defaultBody: `<p>Good news — <strong>{{amount}}</strong> of store credit has been added to your account.</p>
+<p style="color:rgba(42,40,38,0.6)">{{reason}}</p>
+<p>Your balance is now <strong>{{balance}}</strong>. It's applied automatically at checkout — no code needed.</p>
+<p style="margin-top:24px"><a href="{{shop_url}}" style="color:${ACCENT}">Spend it →</a> · <a href="{{account_url}}" style="color:${ACCENT}">View your account</a></p>`,
+    vars: [
+      { name: "amount", description: "Credit just added.", sample: "£5.00" },
+      { name: "balance", description: "New total balance.", sample: "£15.00" },
+      {
+        name: "reason",
+        description: "Why it was added (loyalty, referral, etc.).",
+        sample: "Loyalty reward",
+      },
+      { name: "shop_url", description: "Link to the shop.", sample: `${site.url}/shop` },
+      {
+        name: "account_url",
+        description: "Link to the account page.",
+        sample: `${site.url}/account`,
+      },
+    ],
+  },
 ];
 
 const BY_KEY = new Map(EMAIL_TEMPLATES.map((t) => [t.key, t]));

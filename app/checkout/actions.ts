@@ -8,6 +8,7 @@ import { absoluteUrl } from "@/lib/site";
 import { getCustomer } from "@/lib/customer";
 import { markOrderPaid } from "@/lib/orders";
 import { getRedeemableCard, createPendingRedemption } from "@/lib/gift-cards";
+import { getAvailableCredit, reserveCredit } from "@/lib/store-credit";
 import { getPromoPercent } from "@/lib/promo";
 
 type Payload = {
@@ -16,6 +17,7 @@ type Payload = {
   items: CartItem[];
   giftCardCode?: string;
   promoCode?: string;
+  useStoreCredit?: boolean;
 };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -23,7 +25,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 export async function createCheckoutSession(
   payload: Payload,
 ): Promise<{ url?: string; error?: string }> {
-  const { email, shipping_address, items, giftCardCode, promoCode } = payload;
+  const { email, shipping_address, items, giftCardCode, promoCode, useStoreCredit } = payload;
   if (!email || !items.length) return { error: "Missing email or items." };
 
   if (!process.env.STRIPE_SECRET_KEY) {
@@ -106,33 +108,45 @@ export async function createCheckoutSession(
     if (pct) promoAmount = round2((subtotal * pct) / 100);
   }
   const discountedSubtotal = round2(subtotal - promoAmount);
-  const grossTotal = round2(discountedSubtotal + shipping.rate);
-
-  // Gift-card redemption (optional, stacks after the promo). A card covering
-  // the WHOLE remaining order (incl. shipping) skips Stripe entirely; a partial
-  // card is applied via a one-off Stripe coupon, which only discounts line
-  // items — so partial redemptions are capped at the (discounted) items
-  // subtotal (shipping is always paid by card on Stripe).
-  let giftCard: { id: string; redeem: number; full: boolean } | null = null;
-  if (giftCardCode && giftCardCode.trim()) {
-    const card = await getRedeemableCard(giftCardCode, currencyUpper);
-    if (card) {
-      if (card.balance >= grossTotal) {
-        giftCard = { id: card.id, redeem: grossTotal, full: true };
-      } else {
-        giftCard = {
-          id: card.id,
-          redeem: round2(Math.min(card.balance, discountedSubtotal)),
-          full: false,
-        };
-      }
-    }
-  }
-  const discountTotal = round2(promoAmount + (giftCard ? giftCard.redeem : 0));
-  const grandTotal = round2(subtotal + shipping.rate - discountTotal);
+  const grossTotal = round2(discountedSubtotal + shipping.rate); // owed after promo
 
   // Link to the signed-in customer if there is one (guest checkout otherwise).
   const customer = await getCustomer();
+
+  // Credit instruments stack after the promo. A gift card and account store
+  // credit are both cash-like: each can pay for the WHOLE order (incl. shipping)
+  // — in which case Stripe is skipped — but on the Stripe path they're applied
+  // via a one-off `amount_off` coupon which only discounts LINE ITEMS, so the
+  // combined credit used there is capped at the discounted items subtotal
+  // (shipping is always charged on Stripe). Gift card is spent before store
+  // credit, then loyalty earn is computed on the remaining cash.
+  let giftCardId: string | null = null;
+  let giftBalance = 0;
+  if (giftCardCode && giftCardCode.trim()) {
+    const card = await getRedeemableCard(giftCardCode, currencyUpper);
+    if (card) {
+      giftCardId = card.id;
+      giftBalance = card.balance;
+    }
+  }
+  // Store credit is account-based and opt-in (a checkbox), signed-in only.
+  let storeCreditAvailable = 0;
+  if (customer && useStoreCredit) {
+    storeCreditAvailable = await getAvailableCredit(customer.id, currencyUpper);
+  }
+
+  const creditPool = round2(giftBalance + storeCreditAvailable);
+  const fullyCovered = creditPool >= grossTotal;
+  const creditToUse = fullyCovered
+    ? grossTotal
+    : round2(Math.min(creditPool, discountedSubtotal));
+  // Allocate: gift card first, then store credit.
+  const giftRedeem = round2(Math.min(giftBalance, creditToUse));
+  const storeCreditRedeem = round2(creditToUse - giftRedeem);
+
+  const discountTotal = round2(promoAmount + creditToUse);
+  const grandTotal = round2(subtotal + shipping.rate - discountTotal);
+
   const orderRow = {
     email,
     customer_id: customer?.id ?? null,
@@ -181,18 +195,28 @@ export async function createCheckoutSession(
   });
   await sb.from("order_items").insert(itemRows as never);
 
-  // Reserve the gift-card redemption (debited on payment) and, if the card
-  // covers the whole order, finalise it now without a Stripe payment.
-  if (giftCard) {
+  // Reserve the credit redemptions (debited on payment).
+  if (giftCardId && giftRedeem > 0) {
     await createPendingRedemption({
-      giftCardId: giftCard.id,
+      giftCardId,
       orderId,
-      amount: giftCard.redeem,
+      amount: giftRedeem,
       currency: currencyUpper,
     });
-    if (giftCard.full || grandTotal <= 0) {
-      // Fully paid by gift card — mark paid (fires side effects: debits the
-      // card, sends the receipt, runs fulfilment) and skip Stripe.
+  }
+  if (customer && storeCreditRedeem > 0) {
+    await reserveCredit({
+      customerId: customer.id,
+      orderId,
+      amount: storeCreditRedeem,
+      currency: currencyUpper,
+    });
+  }
+  // If credit covers the whole order, finalise now without a Stripe payment —
+  // markOrderPaid fires the side effects (debits the card + store credit, sends
+  // the receipt, runs fulfilment) and we skip Stripe.
+  if (creditToUse > 0) {
+    if (grandTotal <= 0) {
       await markOrderPaid(orderId, null);
       return { url: absoluteUrl(`/orders/${orderId}`) };
     }
@@ -223,15 +247,20 @@ export async function createCheckoutSession(
   // single discount). amount_off only ever discounts line items, and we capped
   // promo + gift redemption at the items subtotal above, so the charged total
   // is exactly grandTotal (= subtotal − discounts + shipping).
-  const stripeDiscount = round2(promoAmount + (giftCard ? giftCard.redeem : 0));
+  const stripeDiscount = round2(promoAmount + creditToUse);
   let discounts: { coupon: string }[] | undefined;
   if (stripeDiscount > 0) {
+    const couponName =
+      promoAmount > 0 && creditToUse > 0
+        ? "Discount + credit"
+        : creditToUse > 0
+          ? "Credit"
+          : "Discount";
     const coupon = await stripe.coupons.create({
       amount_off: Math.round(stripeDiscount * 100),
       currency,
       duration: "once",
-      name:
-        giftCard && promoAmount > 0 ? "Discount + gift card" : giftCard ? "Gift card" : "Discount",
+      name: couponName,
     });
     discounts = [{ coupon: coupon.id }];
   }
@@ -298,6 +327,16 @@ export async function createCheckoutSession(
     .eq("id", orderId);
 
   return { url: session.url ?? undefined };
+}
+
+// Used by the checkout form to show the signed-in customer's spendable store
+// credit (0 / not shown for guests). Currency is GBP — the store's single
+// settlement currency (checkout already rejects mixed-currency bags).
+export async function getStoreCreditPreview(): Promise<{ balance: number; currency: string }> {
+  const customer = await getCustomer();
+  if (!customer) return { balance: 0, currency: "GBP" };
+  const balance = await getAvailableCredit(customer.id, "GBP");
+  return { balance, currency: "GBP" };
 }
 
 // Used by the checkout form to validate a discount code before paying.
