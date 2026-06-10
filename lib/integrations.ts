@@ -63,14 +63,18 @@ export async function getGoogleConfig(): Promise<GoogleConfig> {
   } catch {
     row = {};
   }
-  const pick = (col: string, envKey: string): string => {
+  // Static references only — dynamic process.env[key] doesn't resolve in the
+  // Cloudflare Workers runtime (same constraint as getIntegrationConfig above).
+  const envJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? "";
+  const envFolder = process.env.GOOGLE_DRIVE_FOLDER_ID ?? "";
+  const pick = (col: string, envVal: string): string => {
     const v = row[col];
     if (typeof v === "string" && v.trim()) return v.trim();
-    return process.env[envKey] ?? "";
+    return envVal;
   };
   return {
-    serviceAccountJson: pick("google_service_account_json", "GOOGLE_SERVICE_ACCOUNT_JSON"),
-    driveFolderId: pick("google_drive_folder_id", "GOOGLE_DRIVE_FOLDER_ID"),
+    serviceAccountJson: pick("google_service_account_json", envJson),
+    driveFolderId: pick("google_drive_folder_id", envFolder),
   };
 }
 
