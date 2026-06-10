@@ -2,6 +2,13 @@ import { site, absoluteUrl } from "@/lib/site";
 import type { ProductWithRelations } from "@/lib/product";
 import { primaryImage } from "@/lib/product";
 
+// Social profiles — feeds the Google knowledge panel via sameAs.
+const SOCIAL_PROFILES = [
+  "https://www.instagram.com/thenauticalnomads/",
+  "https://www.facebook.com/thenauticalnomad",
+  "https://www.youtube.com/@nauticalnomads1",
+];
+
 export function organizationLd() {
   return {
     "@context": "https://schema.org",
@@ -10,6 +17,7 @@ export function organizationLd() {
     url: site.url,
     slogan: site.tagline,
     description: site.description,
+    sameAs: SOCIAL_PROFILES,
   };
 }
 

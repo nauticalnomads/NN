@@ -3,7 +3,7 @@ import { fontVariables } from "@/lib/fonts";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { organizationLd } from "@/lib/structured-data";
+import { organizationLd, websiteLd } from "@/lib/structured-data";
 import { allowIndexing, site } from "@/lib/site";
 import { CartProvider } from "@/components/cart/CartProvider";
 import { WishlistProvider } from "@/components/wishlist/WishlistProvider";
@@ -45,6 +45,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" data-theme="horizon" className={fontVariables}>
       <body className="flex min-h-dvh flex-col bg-surface text-ink">
         <JsonLd data={organizationLd()} />
+        <JsonLd data={websiteLd()} />
         <CartProvider>
           <WishlistProvider signedIn={!!customer}>
             <Header nav={nav} />
