@@ -1,6 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 
-// Single source of truth for POD provider credentials. Values are read from
+// Single source of truth for integration credentials. Values are read from
 // store_settings (editable in /admin/settings) and fall back to the Cloudflare
 // Worker env vars, so existing deployments keep working until DB values are set.
 // Server-only (uses the service client) — never import from client components.
@@ -8,6 +8,11 @@ import { createServiceClient } from "@/lib/supabase/service";
 export type IntegrationConfig = {
   printful: { apiKey: string; storeId: string; webhookSecret: string };
   printify: { apiKey: string; shopId: string; webhookSecret: string };
+};
+
+export type GoogleConfig = {
+  serviceAccountJson: string;
+  driveFolderId: string;
 };
 
 export async function getIntegrationConfig(): Promise<IntegrationConfig> {
@@ -46,6 +51,26 @@ export async function getIntegrationConfig(): Promise<IntegrationConfig> {
       shopId: pick("printify_shop_id"),
       webhookSecret: pick("printify_webhook_secret"),
     },
+  };
+}
+
+export async function getGoogleConfig(): Promise<GoogleConfig> {
+  let row: Record<string, unknown> = {};
+  try {
+    const sb = createServiceClient();
+    const { data } = await sb.from("store_settings").select("*").eq("id", true).maybeSingle();
+    row = (data as unknown as Record<string, unknown> | null) ?? {};
+  } catch {
+    row = {};
+  }
+  const pick = (col: string, envKey: string): string => {
+    const v = row[col];
+    if (typeof v === "string" && v.trim()) return v.trim();
+    return process.env[envKey] ?? "";
+  };
+  return {
+    serviceAccountJson: pick("google_service_account_json", "GOOGLE_SERVICE_ACCOUNT_JSON"),
+    driveFolderId: pick("google_drive_folder_id", "GOOGLE_DRIVE_FOLDER_ID"),
   };
 }
 

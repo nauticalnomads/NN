@@ -3,7 +3,17 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCustomer } from "@/lib/customer";
 import { formatPrice } from "@/lib/format";
+import { absoluteUrl } from "@/lib/site";
+import {
+  getAvailableCredit,
+  getCreditLedger,
+  ensureReferralCode,
+  reasonLabel,
+  LOYALTY_EARN_PERCENT,
+  REFERRAL_REWARD,
+} from "@/lib/store-credit";
 import { updateProfile } from "./actions";
+import { ReferralLink } from "./ReferralLink";
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Pending payment",
@@ -39,6 +49,16 @@ export default async function AccountPage() {
       created_at: string;
     }>) || [];
 
+  // Loyalty: spendable balance, recent ledger, and the customer's referral link.
+  const [creditBalance, ledger, referralCode] = await Promise.all([
+    getAvailableCredit(customer.id, "GBP"),
+    getCreditLedger(customer.id, 20),
+    ensureReferralCode(customer),
+  ]);
+  const referralUrl = referralCode ? absoluteUrl(`/r/${referralCode}`) : null;
+  const fmtDate = (s: string) =>
+    new Date(s).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
   return (
     <div className="space-y-12">
       {/* Profile */}
@@ -66,6 +86,65 @@ export default async function AccountPage() {
           </button>
         </form>
       </section>
+
+      {/* Store credit */}
+      <section>
+        <h2 className="font-mono text-caption tracking-wide text-ink/50 uppercase">Store credit</h2>
+        <div className="mt-4 rounded-sm border border-ink/10 bg-surface-2 p-5">
+          <p className="font-display text-display-2 tracking-tight text-ink">
+            {formatPrice(creditBalance, "GBP")}
+          </p>
+          <p className="mt-1 font-body text-body text-ink/60">
+            Available to spend. Earn {LOYALTY_EARN_PERCENT}% back on every order — it&apos;s applied
+            automatically at checkout.
+          </p>
+        </div>
+        {ledger.length > 0 && (
+          <div className="mt-4 overflow-hidden rounded-sm border border-ink/10">
+            <table className="w-full text-left">
+              <thead className="bg-surface-2">
+                <tr className="font-mono text-caption tracking-wide text-ink/60 uppercase">
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Detail</th>
+                  <th className="px-4 py-3 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ledger.map((t) => (
+                  <tr key={t.id} className="border-t border-ink/10 font-body text-body text-ink">
+                    <td className="px-4 py-3 font-mono text-caption text-ink/60">
+                      {fmtDate(t.created_at)}
+                    </td>
+                    <td className="px-4 py-3">{t.note || reasonLabel(t.reason)}</td>
+                    <td
+                      className={`px-4 py-3 text-right font-mono ${
+                        t.amount >= 0 ? "text-accent-sea" : "text-ink/70"
+                      }`}
+                    >
+                      {t.amount >= 0 ? "+" : "−"}
+                      {formatPrice(Math.abs(t.amount), t.currency)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Refer a friend */}
+      {referralUrl && (
+        <section>
+          <h2 className="font-mono text-caption tracking-wide text-ink/50 uppercase">
+            Refer a friend
+          </h2>
+          <p className="mt-4 font-body text-body text-ink/60">
+            Share your link. When a friend signs up and places their first order, you both get{" "}
+            <span className="text-ink">{formatPrice(REFERRAL_REWARD, "GBP")}</span> in store credit.
+          </p>
+          <ReferralLink url={referralUrl} />
+        </section>
+      )}
 
       {/* Order history */}
       <section>

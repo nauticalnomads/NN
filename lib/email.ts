@@ -222,6 +222,21 @@ export async function sendCareersApplication(app: {
   return !res.error;
 }
 
+// ── STORE CREDIT ADDED (loyalty / referral / admin grant) ────────────────────
+export async function sendStoreCreditAdded(
+  to: string,
+  credit: { amount: number; currency: string; balance: number; reason: string },
+) {
+  const { reasonLabel } = await import("@/lib/store-credit");
+  return sendTemplate("store_credit_added", to, {
+    amount: formatPrice(credit.amount, credit.currency),
+    balance: formatPrice(credit.balance, credit.currency),
+    reason: reasonLabel(credit.reason),
+    account_url: absoluteUrl("/account"),
+    shop_url: absoluteUrl("/shop"),
+  });
+}
+
 // ── GIFT CARD DELIVERY (to purchaser, after payment) ─────────────────────────
 export async function sendGiftCardCode(
   to: string,

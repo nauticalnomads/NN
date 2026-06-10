@@ -1,5 +1,20 @@
 [
   {
+    "source": "/blogs/:path*",
+    "destination": "/journal",
+    "permanent": true
+  },
+  {
+    "source": "/collections",
+    "destination": "/shop",
+    "permanent": true
+  },
+  {
+    "source": "/products",
+    "destination": "/shop",
+    "permanent": true
+  },
+  {
     "source": "/pages/about",
     "destination": "/about",
     "permanent": true

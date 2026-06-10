@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useCart, type CartItem } from "@/components/cart/CartProvider";
 import { formatPrice } from "@/lib/format";
-import { createCheckoutSession, previewPromoAction } from "./actions";
+import { createCheckoutSession, previewPromoAction, getStoreCreditPreview } from "./actions";
 import { previewGiftCardAction } from "@/app/gift-cards/actions";
 
 type GiftInfo = { valid: boolean; balance?: number; currency?: string; message: string };
@@ -24,8 +24,20 @@ export function CheckoutForm() {
   const [promoCode, setPromoCode] = useState("");
   const [promoInfo, setPromoInfo] = useState<PromoInfo | null>(null);
   const [promoPending, startPromo] = useTransition();
+  const [credit, setCredit] = useState<{ balance: number; currency: string }>({
+    balance: 0,
+    currency: "GBP",
+  });
+  const [useCredit, setUseCredit] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [pending, start] = useTransition();
+
+  // Signed-in customers can spend their store credit; guests get { balance: 0 }.
+  useEffect(() => {
+    getStoreCreditPreview()
+      .then(setCredit)
+      .catch(() => undefined);
+  }, []);
 
   function applyGiftCard() {
     if (!gcCode.trim()) return;
@@ -81,6 +93,7 @@ export function CheckoutForm() {
           items: items.map((i): CartItem => ({ ...i })),
           giftCardCode: gcInfo?.valid ? gcCode.trim() : undefined,
           promoCode: promoInfo?.valid ? promoCode.trim() : undefined,
+          useStoreCredit: credit.balance > 0 && useCredit,
         });
         if (error || !url) {
           setErr(error || "Checkout unavailable. Try again in a moment.");
@@ -228,6 +241,24 @@ export function CheckoutForm() {
             </p>
           )}
         </div>
+
+        {credit.balance > 0 && (
+          <div className="mt-5 border-t border-ink/10 pt-4">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                checked={useCredit}
+                onChange={(e) => setUseCredit(e.target.checked)}
+                className="mt-0.5 accent-accent-sun"
+              />
+              <span className="font-mono text-caption text-ink/70">
+                Apply your store credit —{" "}
+                <span className="text-ink">{formatPrice(credit.balance, credit.currency)}</span>{" "}
+                available. Used before card payment; any remainder goes on the Stripe page.
+              </span>
+            </label>
+          </div>
+        )}
 
         <button
           type="submit"

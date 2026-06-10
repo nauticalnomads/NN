@@ -25,6 +25,11 @@ const PAGE_REDIRECTS = [
   { source: "/pages/returns", destination: "/shipping-returns" },
   { source: "/pages/size-guide", destination: "/size-guide" },
   { source: "/pages/faq", destination: "/shipping-returns" },
+  // Shopify blog lived at /blogs/{blog}/{article}; send everything to journal.
+  { source: "/blogs/:path*", destination: "/journal" },
+  // Bare listing roots.
+  { source: "/collections", destination: "/shop" },
+  { source: "/products", destination: "/shop" },
 ];
 
 async function paginate(rootField, selection) {
@@ -66,6 +71,21 @@ async function main() {
   }
   console.log(`Loaded ${slugByGid.size} product slugs from Supabase.`);
 
+  // Our collections: match Shopify gid → new slug where migrated, and keep the
+  // set of our slugs so a same-named handle maps to its real collection page
+  // (better for SEO than dumping every collection onto /shop).
+  const colSlugByGid = new Map();
+  const ourColSlugs = new Set();
+  {
+    const { data, error } = await sb.from("collections").select("slug, source_id");
+    if (error) throw new Error(error.message);
+    for (const c of data ?? []) {
+      if (c.slug) ourColSlugs.add(c.slug);
+      if (c.source_id) colSlugByGid.set(c.source_id, c.slug);
+    }
+  }
+  console.log(`Loaded ${ourColSlugs.size} collection slugs from Supabase.`);
+
   const products = await paginate("products", "id handle");
   const collections = await paginate("collections", "id handle");
   console.log(`Shopify: ${products.length} products, ${collections.length} collections.`);
@@ -91,8 +111,18 @@ async function main() {
       add(`/products/${p.handle}`, "/shop");
     }
   }
-  // No per-collection equivalents exist on the new site yet → /shop.
-  for (const c of collections) add(`/collections/${c.handle}`, "/shop");
+  // Map each Shopify collection to its new collection page where we have one
+  // (by migrated gid, else by same-named slug), otherwise fall back to /shop.
+  let colMatched = 0;
+  for (const c of collections) {
+    const slug = colSlugByGid.get(c.id) ?? (ourColSlugs.has(c.handle) ? c.handle : null);
+    if (slug) {
+      colMatched++;
+      add(`/collections/${c.handle}`, `/collections/${slug}`);
+    } else {
+      add(`/collections/${c.handle}`, "/shop");
+    }
+  }
 
   for (const r of PAGE_REDIRECTS) add(r.source, r.destination);
 
@@ -105,7 +135,8 @@ async function main() {
   console.log(
     `\nWrote lib/redirects.json — ${redirects.length} redirects ` +
       `(${matched} product slug matches, ${dropped} dropped→/shop, ` +
-      `${collections.length} collections→/shop, ${PAGE_REDIRECTS.length} pages).`,
+      `${colMatched}/${collections.length} collections mapped to a page, ` +
+      `${PAGE_REDIRECTS.length} static).`,
   );
 }
 

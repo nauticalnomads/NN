@@ -639,3 +639,49 @@ Stops once paid; bounded so a genuinely failed payment doesn't poll forever.
 
 `audit_log` migration applied; verified table + insert path + ops-only RLS (anon blocked).
 Settings changes now record actor + from→to and surface in the settings trail.
+
+### Loyalty — account-based store credit + referrals ✅ (needs the store_credit migration run)
+
+Migration `20260610120000_loyalty_store_credit.sql` adds a `store_credit_transactions`
+ledger (service-role only, like gift cards) plus `referral_code`/`referred_by` on customers.
+Domain logic in `lib/store-credit.ts`:
+
+- **Earn (loyalty):** 5% back as store credit on the net _cash_ spent on merchandise
+  (`grand_total − shipping`, clamped ≥ 0) — paying entirely with credit earns nothing, so it
+  can't be farmed. Granted in `markOrderPaid` side effects, idempotent per (order, reason).
+- **Referral:** every account gets a shareable link (`/r/CODE` → drops a 60-day cookie →
+  `ensureCustomer` records `referred_by` on sign-up). On the referred customer's **first** paid
+  order both parties get £10 credit (once ever, guarded by an existing `referral_referee` row).
+- **Redeem:** account-based — a checkbox at checkout applies the balance like a gift card
+  (reserve at checkout → settle on payment, capped to live balance so concurrent checkouts
+  can't overspend; spent after gift card, before Stripe). Fully-covered orders skip Stripe.
+- **Surfaces:** account page shows balance + ledger + referral link; admin → Store credit lists
+  the ledger and grants credit manually; `store_credit_added` email (editable) fires on each grant.
+
+Balance = sum of `applied` rows; redemptions are negative `pending` rows flipped to `applied`
+on payment. Reads degrade to 0/empty before the migration is applied, so build/runtime are safe.
+
+### Social scheduling ✅
+
+`/admin/social` could only post drafts immediately; the `social_drafts.scheduled_at` column
+(+ the `scheduled` enum value) existed but was unused. Wired it up end to end:
+
+- **Schedule:** each draft gets a date/time picker → `scheduleDraft` sets `status = 'scheduled'`
+  - `scheduled_at`. Scheduled posts show their time with **Post now** / **Unschedule** controls.
+- **Dispatch:** new `/api/cron/social` (CRON_SECRET-gated, same as abandoned-cart) finds
+  `scheduled` rows whose `scheduled_at` has passed and publishes each via the Make.com webhook.
+- **Shared publish path:** extracted `lib/social.ts → dispatchSocialPost(id)`, used by both the
+  manual **Post now** button and the cron. It CAS-guards on status (`draft`/`scheduled` only),
+  so a cron/manual race or double cron fire can't double-post; a failed webhook drops to `failed`.
+- **Cron wiring:** `worker.js` `scheduled()` now replays internal authenticated POSTs to BOTH
+  `/api/cron/abandoned-cart` and `/api/cron/social` on the existing hourly Cloudflare trigger —
+  no new trigger or env needed.
+
+Note: granularity is the cron cadence (hourly), so a post scheduled for 14:20 goes out at the
+top of the next hour. Tighten `wrangler.jsonc` `triggers.crons` if finer timing is needed.
+
+### Wishlist ✅ (was already built; REDESIGN box now ticked)
+
+Verified complete: `components/wishlist/WishlistProvider.tsx` (guest localStorage → server merge
+on sign-in), `/api/wishlist` (GET/POST/DELETE + batch merge, RLS `wishlists_self`),
+`/api/products/by-ids`, header + ProductCard hearts, and the `/wishlist` page/grid.

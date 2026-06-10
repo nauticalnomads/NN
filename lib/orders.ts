@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { autoFulfilOrder } from "@/lib/fulfilment";
 import { sendOrderConfirmation } from "@/lib/email";
 import { processGiftCardsForOrder } from "@/lib/gift-cards";
+import { processStoreCreditForOrder } from "@/lib/store-credit";
 
 // Idempotently flip an order to `paid` and fire the one-time side effects
 // (confirmation email + auto-fulfilment). Safe to call from BOTH the Stripe
@@ -40,6 +41,10 @@ export async function markOrderPaid(
     // Activate any gift cards bought in this order (+ email the code) and debit
     // any gift-card balance redeemed against it. No-op for ordinary orders.
     await processGiftCardsForOrder(orderId).catch((e) => console.error("gift cards:", e));
+    // Settle any reserved store credit, award loyalty credit on this order, and
+    // pay out referral rewards on a referred customer's first order. No-op for
+    // guests / orders with no store-credit activity.
+    await processStoreCreditForOrder(orderId).catch((e) => console.error("store credit:", e));
     await autoFulfilOrder(orderId).catch((e) => console.error("auto-fulfil:", e));
   };
   try {

@@ -1,6 +1,8 @@
-// Google Drive listing for the social tool. Uses a service-account key (JSON)
-// stored in GOOGLE_SERVICE_ACCOUNT_JSON env. Folder id in GOOGLE_DRIVE_FOLDER_ID.
-// Returns image files (publicly viewable) with thumbnails + direct view URLs.
+// Google Drive listing for the social tool. Credentials come from store_settings
+// (admin → Settings → Social automation) with fallback to env vars. Folder id
+// and service-account JSON can be pasted in the admin without redeploying.
+
+import { getGoogleConfig } from "@/lib/integrations";
 
 type DriveFile = {
   id: string;
@@ -12,13 +14,12 @@ type DriveFile = {
 
 let cachedToken: { token: string; exp: number } | null = null;
 
-async function token(): Promise<string | null> {
+async function token(serviceAccountJson: string): Promise<string | null> {
   if (cachedToken && Date.now() < cachedToken.exp) return cachedToken.token;
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (!raw) return null;
+  if (!serviceAccountJson) return null;
   let sa: { client_email: string; private_key: string };
   try {
-    sa = JSON.parse(raw);
+    sa = JSON.parse(serviceAccountJson);
   } catch {
     return null;
   }
@@ -35,7 +36,6 @@ async function token(): Promise<string | null> {
   const enc = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
   const unsigned = `${enc(header)}.${enc(claim)}`;
 
-  // Sign RS256 with the service account private key (uses node:crypto).
   const { createSign } = await import("node:crypto");
   const signer = createSign("RSA-SHA256");
   signer.update(unsigned);
@@ -57,11 +57,12 @@ async function token(): Promise<string | null> {
 }
 
 export async function listImages(): Promise<DriveFile[]> {
-  const t = await token();
-  const folder = process.env.GOOGLE_DRIVE_FOLDER_ID;
-  if (!t || !folder) return [];
+  const { serviceAccountJson, driveFolderId } = await getGoogleConfig();
+  if (!serviceAccountJson || !driveFolderId) return [];
+  const t = await token(serviceAccountJson);
+  if (!t) return [];
   const q = encodeURIComponent(
-    `'${folder}' in parents and mimeType contains 'image/' and trashed = false`,
+    `'${driveFolderId}' in parents and mimeType contains 'image/' and trashed = false`,
   );
   const fields = encodeURIComponent("files(id,name,mimeType,thumbnailLink,webContentLink)");
   const res = await fetch(

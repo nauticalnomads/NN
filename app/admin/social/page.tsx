@@ -2,7 +2,7 @@ import Image from "next/image";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { listImages, driveImageUrl } from "@/lib/google-drive";
-import { createDraft, postDraft, deleteDraft } from "./actions";
+import { createDraft, postDraft, deleteDraft, scheduleDraft, unscheduleDraft } from "./actions";
 
 export default async function AdminSocial() {
   await requireStaff();
@@ -88,17 +88,51 @@ export default async function AdminSocial() {
                 {d.caption ?? "(no caption)"}
               </p>
               <p className="mt-2 font-mono text-caption text-ink/50">
-                {d.status} · {new Date(d.created_at).toLocaleString()}
+                {d.status}
+                {d.status === "scheduled" && d.scheduled_at
+                  ? ` for ${new Date(d.scheduled_at).toLocaleString()}`
+                  : ` · ${new Date(d.created_at).toLocaleString()}`}
               </p>
             </div>
-            <div className="flex flex-col gap-2">
+            <div className="flex w-56 shrink-0 flex-col gap-2">
               {d.status === "draft" && (
-                <form action={postDraft}>
-                  <input type="hidden" name="id" value={d.id} />
-                  <button className="rounded-sm bg-accent-sun px-3 py-1 font-mono text-caption tracking-widest text-surface uppercase">
-                    Post
-                  </button>
-                </form>
+                <>
+                  <form action={postDraft}>
+                    <input type="hidden" name="id" value={d.id} />
+                    <button className="w-full rounded-sm bg-accent-sun px-3 py-1 font-mono text-caption tracking-widest text-surface uppercase">
+                      Post now
+                    </button>
+                  </form>
+                  {/* Schedule: pick a future time; the hourly cron publishes it. */}
+                  <form action={scheduleDraft} className="flex flex-col gap-1.5">
+                    <input type="hidden" name="id" value={d.id} />
+                    <input
+                      type="datetime-local"
+                      name="scheduled_at"
+                      required
+                      className="rounded-sm border border-ink/20 bg-surface px-2 py-1 font-mono text-caption text-ink"
+                    />
+                    <button className="rounded-sm border border-ink/30 px-3 py-1 font-mono text-caption tracking-widest text-ink uppercase transition-colors hover:border-ink/60">
+                      Schedule
+                    </button>
+                  </form>
+                </>
+              )}
+              {d.status === "scheduled" && (
+                <>
+                  <form action={postDraft}>
+                    <input type="hidden" name="id" value={d.id} />
+                    <button className="w-full rounded-sm bg-accent-sun px-3 py-1 font-mono text-caption tracking-widest text-surface uppercase">
+                      Post now
+                    </button>
+                  </form>
+                  <form action={unscheduleDraft}>
+                    <input type="hidden" name="id" value={d.id} />
+                    <button className="w-full rounded-sm border border-ink/30 px-3 py-1 font-mono text-caption tracking-widest text-ink uppercase transition-colors hover:border-ink/60">
+                      Unschedule
+                    </button>
+                  </form>
+                </>
               )}
               <form action={deleteDraft}>
                 <input type="hidden" name="id" value={d.id} />
