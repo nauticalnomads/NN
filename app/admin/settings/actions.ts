@@ -22,7 +22,7 @@ export async function saveIntegrations(formData: FormData) {
     "google_service_account_json",
   ];
   // Plain fields: always save (empty string clears the value).
-  const plainFields = ["google_drive_folder_id", "make_webhook_url"];
+  const plainFields = ["google_drive_folder_id", "email_covers_folder_id", "make_webhook_url"];
 
   const patch: Record<string, string | null> = {};
   for (const f of secretFields) {

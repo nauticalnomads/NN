@@ -9,6 +9,7 @@
 // which receives {{heading}} and {{body}}.
 import { createServiceClient } from "@/lib/supabase/service";
 import { site } from "@/lib/site";
+import { listEmailCoverImages, driveImageUrl } from "@/lib/google-drive";
 
 export const LAYOUT_KEY = "layout";
 
@@ -40,7 +41,7 @@ const LAYOUT_DEFAULT = `<!doctype html><html><head><meta charset="utf-8"><meta n
         <tr><td style="padding:8px 24px 0">{{logo_block}}</td></tr>
         {{cover_block}}
         <tr><td style="padding:0 24px">
-          <h1 style="margin:24px 0 0;font-size:30px;line-height:1.15;color:#2A2826;font-weight:500">{{heading}}</h1>
+          <h1 style="margin:24px 0 0;font-size:28px;line-height:1.15;color:#2A2826;font-weight:400">{{heading}}</h1>
           <div style="margin-top:20px;font-size:16px;line-height:1.6;color:#2A2826">{{body}}</div>
           <hr style="border:none;border-top:1px solid rgba(42,40,38,0.1);margin:40px 0 24px"/>
           <p style="font-size:12px;color:rgba(42,40,38,0.5);margin:0">{{site_name}} · Live by the tide · <a href="{{site_url}}" style="color:rgba(42,40,38,0.5)">{{site_url}}</a></p>
@@ -348,11 +349,19 @@ export async function getEmailBranding(): Promise<EmailBranding> {
           value: { logo_url?: string; cover_urls?: string[]; cover_url?: string };
         } | null
       )?.value ?? {};
-    const covers = Array.isArray(v.cover_urls)
+
+    // Manual covers set in admin take precedence; fall back to Drive folder.
+    let covers = Array.isArray(v.cover_urls)
       ? v.cover_urls.filter((u): u is string => !!u)
       : v.cover_url
         ? [v.cover_url]
         : [];
+
+    if (covers.length === 0) {
+      const driveCovers = await listEmailCoverImages();
+      covers = driveCovers.map((f) => driveImageUrl(f.id));
+    }
+
     return { logo_url: v.logo_url ?? null, cover_urls: covers };
   } catch {
     return { logo_url: null, cover_urls: [] };
@@ -366,8 +375,8 @@ function wrapLayout(
   branding: EmailBranding = { logo_url: null, cover_urls: [] },
 ): string {
   const logo_block = branding.logo_url
-    ? `<img src="${branding.logo_url}" alt="${site.name}" height="56" style="display:block;height:56px;width:auto;max-width:300px;border:0" />`
-    : `<p style="margin:0;font-size:22px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#2A2826">${site.name}</p>`;
+    ? `<img src="${branding.logo_url}" alt="${site.name}" height="40" style="display:block;height:40px;width:auto;max-width:260px;border:0" />`
+    : `<p style="margin:0;font-size:11px;font-weight:400;letter-spacing:0.45em;text-transform:uppercase;color:#2A2826">${site.name}</p>`;
   const cover = branding.cover_urls.length
     ? branding.cover_urls[Math.floor(Math.random() * branding.cover_urls.length)]
     : null;

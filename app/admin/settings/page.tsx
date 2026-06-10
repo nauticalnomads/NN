@@ -228,6 +228,27 @@ export default async function AdminSettings({
             placeholder="e.g. 1aBcDeFgHiJkLmNoPqRsTuVwXyZ"
           />
           <TextField
+            label="Email Covers — Google Drive Folder ID"
+            name="email_covers_folder_id"
+            defaultValue={google.emailCoversFolderId}
+            placeholder="e.g. 1J-TRvxR4u494jUMCBB5DaZYHEOMqcEKd"
+          />
+          <p className="font-mono text-caption text-ink/50">
+            Images in this Drive folder will rotate as email header banners. Share the folder with{" "}
+            <span className="text-ink">
+              {google.serviceAccountJson
+                ? (() => {
+                    try {
+                      return JSON.parse(google.serviceAccountJson).client_email;
+                    } catch {
+                      return "your service account email";
+                    }
+                  })()
+                : "your service account email"}
+            </span>
+            .
+          </p>
+          <TextField
             label="Make.com Webhook URL"
             name="make_webhook_url"
             defaultValue={(s.make_webhook_url as string) || ""}
