@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { dispatchSocialPost, topUpSocialDrafts } from "@/lib/social";
+import { dispatchSocialPost, topUpSocialDrafts, captionPendingScheduled } from "@/lib/social";
 import { tokenAuthorized } from "@/lib/webhook-auth";
 
 // Scheduled-post dispatcher. Driven by the same Cloudflare Cron Trigger as the
@@ -20,6 +20,11 @@ export async function POST(request: NextRequest) {
   }
 
   const sb = createServiceClient();
+
+  // Caption any scheduled posts still missing a caption (e.g. just created by a
+  // queue rebuild, which intentionally inserts them caption-less to stay light).
+  const captioned = await captionPendingScheduled();
+
   const now = new Date().toISOString();
   const { data } = await sb
     .from("social_drafts")
@@ -38,5 +43,5 @@ export async function POST(request: NextRequest) {
   // Refill the autopilot queue (no-op when autopilot is off).
   const generated = await topUpSocialDrafts();
 
-  return NextResponse.json({ due: due.length, posted, generated });
+  return NextResponse.json({ due: due.length, posted, generated, captioned });
 }

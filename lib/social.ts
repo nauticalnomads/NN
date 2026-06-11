@@ -194,10 +194,15 @@ export async function topUpSocialDrafts(): Promise<number> {
 
 // Rebuild the scheduled queue from scratch in the saved drag-order. Clears
 // not-yet-published rows (draft + scheduled), then schedules the first
-// QUEUE_TARGET images (in order) at the next 10:00/17:00 GMT slots, captioning
-// each. Captions are generated concurrently (bounded) so this is fast enough to
-// await directly from the Save action. Pass `orderOverride` to use the order the
-// admin just submitted even if persisting it to the DB hasn't taken effect.
+// QUEUE_TARGET images (in order) at the next 10:00/17:00 GMT slots.
+//
+// Deliberately does NOT caption here: captioning 20 images inline means ~40
+// Drive+AI subrequests in one Worker invocation, which trips Cloudflare's
+// resource limits (error 1102). Rows are inserted caption-less in a single
+// batched insert (fast, a couple of subrequests); the hourly cron
+// (captionPendingScheduled) fills captions in the background, and the per-post
+// "Regenerate" button captions one on demand. Pass `orderOverride` to use the
+// order the admin just submitted.
 export async function rebuildQueueFromOrder(orderOverride?: string[]): Promise<number> {
   const sb = createServiceClient();
   const images = await listImages();
@@ -210,23 +215,43 @@ export async function rebuildQueueFromOrder(orderOverride?: string[]): Promise<n
   await sb.from("social_drafts").delete().in("status", ["draft", "scheduled"]);
 
   const slots = nextSlots(picks.length, new Date());
+  const rows = picks.map((img, i) => ({
+    image_ref: img.id,
+    image_url: driveImageUrl(img.id),
+    caption: "",
+    status: "scheduled",
+    scheduled_at: slots[i].toISOString(),
+    platform_targets: DEFAULT_PLATFORMS,
+  }));
+  const { error } = await sb.from("social_drafts").insert(rows as never);
+  return error ? 0 : rows.length;
+}
+
+// Fill captions for scheduled posts that don't have one yet (e.g. just created by
+// a queue rebuild). Bounded per call so a cron tick stays well within limits.
+export async function captionPendingScheduled(limit = 10): Promise<number> {
+  const sb = createServiceClient();
+  const { data } = await sb
+    .from("social_drafts")
+    .select("id, image_ref, caption")
+    .eq("status", "scheduled")
+    .order("scheduled_at", { ascending: true })
+    .limit(60);
+  const rows =
+    (data as unknown as { id: string; image_ref: string | null; caption: string | null }[]) ?? [];
+  const pending = rows.filter((r) => r.image_ref && !r.caption?.trim()).slice(0, limit);
+  if (pending.length === 0) return 0;
+
   const voice = await brandVoice();
-
-  // Caption all picks concurrently (bounded) — 20 sequential calls would be too
-  // slow for a single request; this keeps the Save action responsive.
-  const captions = await mapLimit(picks, 6, (img) => captionFor(img.id, voice));
-
+  const captions = await mapLimit(pending, 5, (r) => captionFor(r.image_ref as string, voice));
   let made = 0;
-  for (let i = 0; i < picks.length; i++) {
-    const img = picks[i];
-    const { error } = await sb.from("social_drafts").insert({
-      image_ref: img.id,
-      image_url: driveImageUrl(img.id),
-      caption: captions[i],
-      status: "scheduled",
-      scheduled_at: slots[i].toISOString(),
-      platform_targets: DEFAULT_PLATFORMS,
-    } as never);
+  for (let i = 0; i < pending.length; i++) {
+    if (!captions[i]) continue;
+    const { error } = await sb
+      .from("social_drafts")
+      .update({ caption: captions[i] } as never)
+      .eq("id", pending[i].id)
+      .eq("status", "scheduled");
     if (!error) made += 1;
   }
   return made;
