@@ -4,6 +4,125 @@
 // (app/admin/social/actions.ts) and the scheduler cron (app/api/cron/social),
 // so both paths dispatch identically and flip the draft's status the same way.
 import { createServiceClient } from "@/lib/supabase/service";
+import { listImages, driveImageUrl, driveCaptionUrl } from "@/lib/google-drive";
+import { captionImage } from "@/lib/anthropic";
+
+// Autopilot: keep a rolling queue of QUEUE_TARGET scheduled posts, going out at
+// SLOT_HOURS_UTC each day (10:00 & 17:00 GMT). When one publishes the queue drops
+// and the next top-up refills it, so the schedule stays full hands-free.
+export const QUEUE_TARGET = 20;
+export const SLOT_HOURS_UTC = [10, 17];
+const DEFAULT_PLATFORMS = ["instagram", "facebook"];
+// Cap captions generated per top-up run so a single cron tick / toggle stays
+// within runtime limits; the hourly cron converges the queue over a few runs.
+const TOPUP_BATCH = 8;
+
+// The next `count` posting slots (10:00 / 17:00 UTC) strictly after `after`.
+export function nextSlots(count: number, after: Date): Date[] {
+  const slots: Date[] = [];
+  const cursor = new Date(
+    Date.UTC(after.getUTCFullYear(), after.getUTCMonth(), after.getUTCDate(), 0, 0, 0, 0),
+  );
+  while (slots.length < count) {
+    for (const h of SLOT_HOURS_UTC) {
+      const slot = new Date(
+        Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate(), h, 0, 0, 0),
+      );
+      if (slot.getTime() > after.getTime() && slots.length < count) slots.push(slot);
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return slots;
+}
+
+export async function getAutopilot(): Promise<boolean> {
+  try {
+    const sb = createServiceClient();
+    const { data } = await sb
+      .from("store_settings")
+      .select("social_autopilot")
+      .eq("id", true)
+      .maybeSingle();
+    return !!(data as unknown as { social_autopilot?: boolean } | null)?.social_autopilot;
+  } catch {
+    return false;
+  }
+}
+
+export async function setAutopilot(on: boolean): Promise<void> {
+  const sb = createServiceClient();
+  await sb
+    .from("store_settings")
+    .update({ social_autopilot: on } as never)
+    .eq("id", true);
+}
+
+type QueueRow = { image_ref: string | null; scheduled_at: string | null; status: string };
+
+// Refill the scheduled queue to QUEUE_TARGET when autopilot is on. Picks Drive
+// images that aren't already queued (spreading reuse evenly when the library is
+// smaller than the queue), captions each, and schedules it at the next free slot
+// after the current tail. Bounded to TOPUP_BATCH per call; safe to run on every
+// cron tick. Returns how many drafts it generated.
+export async function topUpSocialDrafts(): Promise<number> {
+  if (!(await getAutopilot())) return 0;
+
+  const sb = createServiceClient();
+  const images = await listImages();
+  if (images.length === 0) return 0;
+
+  // Current queue: rows awaiting publish (manual drafts + scheduled posts).
+  const { data: queueData } = await sb
+    .from("social_drafts")
+    .select("image_ref, scheduled_at, status")
+    .in("status", ["draft", "scheduled"]);
+  const queue = (queueData as unknown as QueueRow[]) ?? [];
+
+  const scheduledCount = queue.filter((r) => r.status === "scheduled").length;
+  const need = Math.min(QUEUE_TARGET - scheduledCount, TOPUP_BATCH);
+  if (need <= 0) return 0;
+
+  // Spread reuse: prefer images with the fewest copies already in the queue.
+  const useCount = new Map<string, number>();
+  for (const r of queue)
+    if (r.image_ref) useCount.set(r.image_ref, (useCount.get(r.image_ref) ?? 0) + 1);
+  const ordered = [...images].sort(
+    (a, b) => (useCount.get(a.id) ?? 0) - (useCount.get(b.id) ?? 0) || a.name.localeCompare(b.name),
+  );
+  const picks = ordered.slice(0, need);
+
+  // Schedule after the current tail (latest scheduled post), else from now.
+  const tail = queue
+    .filter((r) => r.scheduled_at)
+    .map((r) => new Date(r.scheduled_at as string).getTime())
+    .reduce((m, t) => Math.max(m, t), Date.now());
+  const slots = nextSlots(picks.length, new Date(tail));
+
+  // Brand voice for captions.
+  const { data: settingsData } = await sb
+    .from("store_settings")
+    .select("brand_voice")
+    .eq("id", true)
+    .maybeSingle();
+  const voice = (settingsData as unknown as { brand_voice: string } | null)?.brand_voice || "";
+
+  let made = 0;
+  for (let i = 0; i < picks.length; i++) {
+    const img = picks[i];
+    const captionUrl = (await driveCaptionUrl(img.id)) ?? driveImageUrl(img.id);
+    const caption = (await captionImage(captionUrl, voice)) ?? "";
+    const { error } = await sb.from("social_drafts").insert({
+      image_ref: img.id,
+      image_url: driveImageUrl(img.id),
+      caption,
+      status: "scheduled",
+      scheduled_at: slots[i].toISOString(),
+      platform_targets: DEFAULT_PLATFORMS,
+    } as never);
+    if (!error) made += 1;
+  }
+  return made;
+}
 
 type DraftRow = {
   image_url: string | null;

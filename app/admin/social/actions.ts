@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { captionImage } from "@/lib/anthropic";
-import { dispatchSocialPost } from "@/lib/social";
+import { driveCaptionUrl } from "@/lib/google-drive";
+import { dispatchSocialPost, setAutopilot, topUpSocialDrafts } from "@/lib/social";
 
 export async function createDraft(formData: FormData) {
   const admin = await requireStaff();
@@ -20,7 +22,10 @@ export async function createDraft(formData: FormData) {
     .maybeSingle();
   const voice = (settingsData as unknown as { brand_voice: string } | null)?.brand_voice || "";
 
-  const caption = (await captionImage(imageUrl, voice)) ?? "";
+  // Caption from a small, resized thumbnail — Drive originals are often multi-MB,
+  // over the vision model's per-image limit, which makes the full URL fail.
+  const captionUrl = (driveId && (await driveCaptionUrl(driveId))) || imageUrl;
+  const caption = (await captionImage(captionUrl, voice)) ?? "";
   await sb.from("social_drafts").insert({
     image_url: imageUrl,
     image_ref: driveId,
@@ -29,6 +34,16 @@ export async function createDraft(formData: FormData) {
     platform_targets: ["instagram", "facebook"],
     created_by: admin.id,
   } as never);
+  revalidatePath("/admin/social");
+}
+
+// Flip autopilot on/off. Turning it on kicks an immediate top-up so the queue
+// starts filling right away; the hourly cron keeps it topped to QUEUE_TARGET.
+export async function toggleAutopilot(formData: FormData) {
+  await requireStaff();
+  const on = String(formData.get("on") || "") === "1";
+  await setAutopilot(on);
+  if (on) after(() => topUpSocialDrafts());
   revalidatePath("/admin/social");
 }
 

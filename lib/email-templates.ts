@@ -38,7 +38,7 @@ const LAYOUT_DEFAULT = `<!doctype html><html><head><meta charset="utf-8"><meta n
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#FAF6EC;padding:32px 0">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" style="background:#FAF6EC;width:560px;max-width:100%">
-        <tr><td style="padding:8px 24px 0">{{logo_block}}</td></tr>
+        <tr><td align="center" style="padding:8px 24px 0;text-align:center">{{logo_block}}</td></tr>
         {{cover_block}}
         <tr><td style="padding:0 24px">
           <h1 style="margin:24px 0 0;font-size:28px;line-height:1.15;color:#2A2826;font-weight:400">{{heading}}</h1>
@@ -375,8 +375,8 @@ function wrapLayout(
   branding: EmailBranding = { logo_url: null, cover_urls: [] },
 ): string {
   const logo_block = branding.logo_url
-    ? `<img src="${branding.logo_url}" alt="${site.name}" height="40" style="display:block;height:40px;width:auto;max-width:260px;border:0" />`
-    : `<p style="margin:0;font-size:11px;font-weight:400;letter-spacing:0.45em;text-transform:uppercase;color:#2A2826">${site.name}</p>`;
+    ? `<img src="${branding.logo_url}" alt="${site.name}" height="40" style="display:inline-block;height:40px;width:auto;max-width:260px;border:0" />`
+    : `<p style="margin:0;font-size:11px;font-weight:400;letter-spacing:0.45em;text-transform:uppercase;color:#2A2826;text-align:center">${site.name}</p>`;
   const cover = branding.cover_urls.length
     ? branding.cover_urls[Math.floor(Math.random() * branding.cover_urls.length)]
     : null;
