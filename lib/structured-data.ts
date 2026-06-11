@@ -44,6 +44,42 @@ export function breadcrumbLd(crumbs: { name: string; path: string }[]) {
   };
 }
 
+export function articleLd(post: {
+  title: string;
+  slug: string;
+  seo_description?: string | null;
+  cover_image_url?: string | null;
+  published_at?: string | null;
+}) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: post.title,
+    url: absoluteUrl(`/journal/${post.slug}`),
+    ...(post.seo_description ? { description: post.seo_description } : {}),
+    ...(post.cover_image_url ? { image: [post.cover_image_url] } : {}),
+    ...(post.published_at ? { datePublished: post.published_at } : {}),
+    author: { "@type": "Organization", name: site.name },
+    publisher: { "@type": "Organization", name: site.name },
+  };
+}
+
+export function collectionLd(collection: {
+  title: string;
+  slug: string;
+  description?: string | null;
+  seo_description?: string | null;
+}) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: collection.title,
+    url: absoluteUrl(`/collections/${collection.slug}`),
+    description: collection.seo_description || collection.description || site.description,
+    isPartOf: { "@type": "WebSite", name: site.name, url: site.url },
+  };
+}
+
 export function productLd(product: ProductWithRelations) {
   const img = primaryImage(product);
   const prices = [product.price, ...(product.variants ?? []).map((v) => v.price)].filter(

@@ -60,6 +60,13 @@ export async function DELETE(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const productId = String(body?.product_id || "");
   if (!productId) return NextResponse.json({ error: "missing product" }, { status: 422 });
-  await sb.from("wishlists").delete().eq("product_id", productId);
+  // RLS (wishlists_self) already scopes this to the caller; the explicit user_id
+  // filter is defence-in-depth so intent is clear and it's safe even if RLS were
+  // ever relaxed.
+  await sb
+    .from("wishlists")
+    .delete()
+    .eq("user_id", customer.user_id ?? "")
+    .eq("product_id", productId);
   return NextResponse.json({ ok: true });
 }

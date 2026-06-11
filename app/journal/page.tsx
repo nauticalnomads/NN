@@ -1,15 +1,15 @@
 import Link from "next/link";
 import Image from "next/image";
-import type { Metadata } from "next";
 import { Container } from "@/components/Container";
 import { createClient } from "@/lib/supabase/server";
-import { absoluteUrl } from "@/lib/site";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Journal",
-  description: "Slow notes from the coast.",
-  alternates: { canonical: absoluteUrl("/journal") },
-};
+export const metadata = pageMetadata({
+  title: "Journal — Coastal Living & Style Notes",
+  description:
+    "Slow notes from the coast — stories on coastal living, slow style and life by the water from Nautical Nomads.",
+  path: "/journal",
+});
 export const revalidate = 300;
 
 export default async function Journal() {

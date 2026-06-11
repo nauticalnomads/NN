@@ -1,13 +1,13 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { Container } from "@/components/Container";
-import { absoluteUrl } from "@/lib/site";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Gift Cards",
-  description: "Give the gift of good clothes.",
-  alternates: { canonical: absoluteUrl("/gift-cards") },
-};
+export const metadata = pageMetadata({
+  title: "Gift Cards — Coastal Clothing Gifts",
+  description:
+    "Give a Nautical Nomads digital gift card — redeemable on any coastal clothing or swimwear in the shop. Delivered instantly by email.",
+  path: "/gift-cards",
+});
 
 export default function GiftCards() {
   return (

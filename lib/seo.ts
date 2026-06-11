@@ -1,4 +1,44 @@
+import type { Metadata } from "next";
 import { complete } from "@/lib/anthropic";
+import { absoluteUrl, site } from "@/lib/site";
+
+// Per-page metadata builder. Produces a consistent set of canonical + Open Graph
+// + Twitter tags so every page is share-ready and self-canonical, instead of
+// silently inheriting the homepage's OG card. `title` is the bare page title;
+// the root layout's template appends " · Nautical Nomads" for the <title>, and
+// we mirror that in the OG/Twitter title here.
+export function pageMetadata(opts: {
+  title: string;
+  description: string;
+  path: string;
+  image?: string;
+  noindex?: boolean;
+}): Metadata {
+  const { title, description, path, image, noindex } = opts;
+  const url = absoluteUrl(path);
+  const ogImage = image ? (image.startsWith("http") ? image : absoluteUrl(image)) : undefined;
+  const ogTitle = `${title} · ${site.name}`;
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    ...(noindex ? { robots: { index: false, follow: false } } : {}),
+    openGraph: {
+      type: "website",
+      siteName: site.name,
+      title: ogTitle,
+      description,
+      url,
+      ...(ogImage ? { images: [{ url: ogImage }] } : {}),
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: ogTitle,
+      description,
+      ...(ogImage ? { images: [ogImage] } : {}),
+    },
+  };
+}
 
 // Reusable SEO copy generator (collections, products, …). Produces an optimised
 // meta title + description. Uses Anthropic when ANTHROPIC_API_KEY is set; falls

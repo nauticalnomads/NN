@@ -1,12 +1,12 @@
-import type { Metadata } from "next";
 import { Prose } from "@/components/Prose";
-import { absoluteUrl } from "@/lib/site";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
   title: "Our Story",
-  description: "How Nautical Nomads started, and why we make what we make.",
-  alternates: { canonical: absoluteUrl("/our-story") },
-};
+  description:
+    "How Nautical Nomads began, and why we make understated coastal lifestyle clothing and swimwear — printed quietly and made to last.",
+  path: "/our-story",
+});
 
 export default function OurStory() {
   return (
