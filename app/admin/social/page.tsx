@@ -1,7 +1,7 @@
 import Image from "next/image";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
-import { listImages, driveImageUrl } from "@/lib/google-drive";
+import { listImages, driveImageUrl, driveThumbnailUrl } from "@/lib/google-drive";
 import { getAutopilot, QUEUE_TARGET, SLOT_HOURS_UTC } from "@/lib/social";
 import {
   createDraft,
@@ -14,6 +14,7 @@ import {
 
 type Draft = {
   id: string;
+  image_ref: string | null;
   image_url: string | null;
   caption: string | null;
   status: string;
@@ -29,7 +30,7 @@ export default async function AdminSocial() {
   const sb = createServiceClient();
   const { data } = await sb
     .from("social_drafts")
-    .select("id, image_url, caption, status, platform_targets, scheduled_at, created_at")
+    .select("id, image_ref, image_url, caption, status, platform_targets, scheduled_at, created_at")
     .order("scheduled_at", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false })
     .limit(60);
@@ -89,43 +90,6 @@ export default async function AdminSocial() {
         </div>
       </section>
 
-      <h2 className="mt-10 font-mono text-caption tracking-wide text-ink/60 uppercase">
-        Photos in Drive ({images.length})
-      </h2>
-      {images.length === 0 ? (
-        <p className="mt-3 font-body text-body text-ink/50">
-          No photos. Check GOOGLE_SERVICE_ACCOUNT_JSON + GOOGLE_DRIVE_FOLDER_ID env vars.
-        </p>
-      ) : (
-        <ul className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {images.map((img) => (
-            <li key={img.id} className="rounded-sm border border-ink/10 p-3">
-              {img.thumbnailLink && (
-                <div className="relative aspect-square w-full overflow-hidden rounded-sm">
-                  {/* Drive thumbnails (lh3.googleusercontent.com) — unoptimized
-                      so we don't have to whitelist + run them through the optimizer. */}
-                  <Image
-                    src={img.thumbnailLink}
-                    alt={img.name}
-                    fill
-                    unoptimized
-                    className="object-cover"
-                  />
-                </div>
-              )}
-              <p className="mt-2 truncate font-mono text-caption text-ink/70">{img.name}</p>
-              <form action={createDraft} className="mt-2">
-                <input type="hidden" name="drive_id" value={img.id} />
-                <input type="hidden" name="image_url" value={driveImageUrl(img.id)} />
-                <button className="w-full rounded-sm bg-ink py-1 font-mono text-caption tracking-widest text-surface uppercase">
-                  Generate caption
-                </button>
-              </form>
-            </li>
-          ))}
-        </ul>
-      )}
-
       {/* ── Scheduled (the queue) ──────────────────────────────────────────── */}
       <h2 className="mt-12 font-mono text-caption tracking-wide text-ink/60 uppercase">
         Scheduled ({scheduled.length})
@@ -136,7 +100,7 @@ export default async function AdminSocial() {
       <ul className="mt-4 space-y-3">
         {scheduled.map((d) => (
           <li key={d.id} className="flex gap-5 rounded-sm border border-ink/10 p-4">
-            <DraftImage src={d.image_url} />
+            <DraftImage draft={d} />
             <div className="flex-1">
               <p className="whitespace-pre-line font-body text-body text-ink">
                 {d.caption ?? "(no caption)"}
@@ -183,7 +147,7 @@ export default async function AdminSocial() {
       <ul className="mt-4 space-y-3">
         {plainDrafts.map((d) => (
           <li key={d.id} className="flex gap-5 rounded-sm border border-ink/10 p-4">
-            <DraftImage src={d.image_url} />
+            <DraftImage draft={d} />
             <div className="flex-1">
               <p className="whitespace-pre-line font-body text-body text-ink">
                 {d.caption ?? "(no caption)"}
@@ -223,10 +187,46 @@ export default async function AdminSocial() {
         ))}
         {plainDrafts.length === 0 && (
           <p className="font-body text-body text-ink/50">
-            No drafts. Generate one from a photo above.
+            No drafts. Generate one from a photo below.
           </p>
         )}
       </ul>
+
+      {/* ── Drive photos (generate new drafts) ─────────────────────────────── */}
+      <h2 className="mt-12 font-mono text-caption tracking-wide text-ink/60 uppercase">
+        Photos in Drive ({images.length})
+      </h2>
+      {images.length === 0 ? (
+        <p className="mt-3 font-body text-body text-ink/50">
+          No photos. Check GOOGLE_SERVICE_ACCOUNT_JSON + GOOGLE_DRIVE_FOLDER_ID env vars.
+        </p>
+      ) : (
+        <ul className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {images.map((img) => (
+            <li key={img.id} className="rounded-sm border border-ink/10 p-3">
+              <div className="relative aspect-square w-full overflow-hidden rounded-sm bg-ink/5">
+                {/* Drive thumbnail endpoint — renders directly in <img>, unoptimized
+                    so we don't have to whitelist + run it through the optimizer. */}
+                <Image
+                  src={img.thumbnailLink || driveThumbnailUrl(img.id)}
+                  alt={img.name}
+                  fill
+                  unoptimized
+                  className="object-cover"
+                />
+              </div>
+              <p className="mt-2 truncate font-mono text-caption text-ink/70">{img.name}</p>
+              <form action={createDraft} className="mt-2">
+                <input type="hidden" name="drive_id" value={img.id} />
+                <input type="hidden" name="image_url" value={driveImageUrl(img.id)} />
+                <button className="w-full rounded-sm bg-ink py-1 font-mono text-caption tracking-widest text-surface uppercase">
+                  Generate caption
+                </button>
+              </form>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {/* ── Recently posted / failed ───────────────────────────────────────── */}
       {done.length > 0 && (
@@ -240,7 +240,7 @@ export default async function AdminSocial() {
                 key={d.id}
                 className="flex items-center gap-5 rounded-sm border border-ink/10 p-3 opacity-75"
               >
-                <DraftImage src={d.image_url} small />
+                <DraftImage draft={d} small />
                 <div className="flex-1">
                   <p className="line-clamp-2 font-body text-caption text-ink/70">
                     {d.caption ?? "(no caption)"}
@@ -277,7 +277,13 @@ export default async function AdminSocial() {
   );
 }
 
-function DraftImage({ src, small = false }: { src: string | null; small?: boolean }) {
+// Preview thumbnail. Prefer the Drive thumbnail endpoint (renders directly in an
+// <img>); the stored image_url is a uc?export=view download link that browsers
+// won't render inline. Falls back to image_url if there's no Drive file id.
+function DraftImage({ draft, small = false }: { draft: Draft; small?: boolean }) {
+  const src = draft.image_ref
+    ? driveThumbnailUrl(draft.image_ref, small ? 120 : 220)
+    : draft.image_url;
   if (!src) return null;
   const size = small ? 56 : 96;
   return (
@@ -287,7 +293,7 @@ function DraftImage({ src, small = false }: { src: string | null; small?: boolea
       width={size}
       height={size}
       unoptimized
-      className={`${small ? "h-14 w-14" : "h-24 w-24"} shrink-0 rounded-sm object-cover`}
+      className={`${small ? "h-14 w-14" : "h-24 w-24"} shrink-0 rounded-sm bg-ink/5 object-cover`}
     />
   );
 }

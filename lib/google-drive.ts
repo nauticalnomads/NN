@@ -92,6 +92,13 @@ export function driveImageUrl(id: string) {
   return `https://drive.google.com/uc?export=view&id=${id}`;
 }
 
+// A browser-renderable thumbnail URL (works directly in <img> for files shared
+// "anyone with the link"). Unlike uc?export=view, this returns a real image
+// instead of a download redirect, so it shows in previews. Default ~400px wide.
+export function driveThumbnailUrl(id: string, size = 400) {
+  return `https://drive.google.com/thumbnail?id=${id}&sz=w${size}`;
+}
+
 // A small, publicly-fetchable image URL suitable for sending to the vision model.
 // Drive originals are often multi-MB (over the model's per-image limit), so we use
 // the Drive thumbnail bumped up to ~1600px (lh3 URLs are public + a few hundred KB).
