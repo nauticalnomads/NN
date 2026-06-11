@@ -64,15 +64,15 @@ states (empty collections, no ambassadors yet).
 
 ### Remaining SEO recommendations
 
-| # | Priority | Recommendation |
-|---|----------|----------------|
-| SEO-1 | High | **Set `NEXT_PUBLIC_ALLOW_INDEXING=true` at go-live.** The site is currently `noindex` + robots-disallow + empty sitemap. Nothing ranks until this flips. |
-| SEO-2 | High | **Add a default OG share image** (1200×630) for pages without their own image (legal, contact, help). Currently those share with no image. |
-| SEO-3 | Med | **Product JSON-LD: add `aggregateRating`/`review`** once reviews exist, and `availability` per-variant. Rich results love ratings. |
-| SEO-4 | Med | **Collection intro copy.** Each collection page should render 2–3 sentences of indexable text above/below the grid (great for "women's swimwear" type queries). The field exists (`description`) — make sure it's populated for published collections. |
-| SEO-5 | Med | **FAQ structured data** on `/help` (FAQPage schema) — you already have a FAQ accordion; marking it up wins FAQ rich results. |
-| SEO-6 | Low | **Breadcrumb JSON-LD on collection + product** is present; extend to journal (done) and consider a visible breadcrumb on collections for UX + SEO. |
-| SEO-7 | Low | Legal/utility pages keep generic titles — fine, but ensure they're in the sitemap only if you want them indexed (they currently are). |
+| #     | Priority | Recommendation                                                                                                                                                                                                                                         |
+| ----- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SEO-1 | High     | **Set `NEXT_PUBLIC_ALLOW_INDEXING=true` at go-live.** The site is currently `noindex` + robots-disallow + empty sitemap. Nothing ranks until this flips.                                                                                               |
+| SEO-2 | High     | **Add a default OG share image** (1200×630) for pages without their own image (legal, contact, help). Currently those share with no image.                                                                                                             |
+| SEO-3 | Med      | **Product JSON-LD: add `aggregateRating`/`review`** once reviews exist, and `availability` per-variant. Rich results love ratings.                                                                                                                     |
+| SEO-4 | Med      | **Collection intro copy.** Each collection page should render 2–3 sentences of indexable text above/below the grid (great for "women's swimwear" type queries). The field exists (`description`) — make sure it's populated for published collections. |
+| SEO-5 | Med      | **FAQ structured data** on `/help` (FAQPage schema) — you already have a FAQ accordion; marking it up wins FAQ rich results.                                                                                                                           |
+| SEO-6 | Low      | **Breadcrumb JSON-LD on collection + product** is present; extend to journal (done) and consider a visible breadcrumb on collections for UX + SEO.                                                                                                     |
+| SEO-7 | Low      | Legal/utility pages keep generic titles — fine, but ensure they're in the sitemap only if you want them indexed (they currently are).                                                                                                                  |
 
 ---
 
@@ -82,6 +82,7 @@ Benchmarked against coastal/swim/surf peers: **Finisterre, Passenger, Saltrock,
 Billabong, Roxy, Vitamin A, Hunza G**, and slow-fashion DTC (**Sézane, Asket**).
 
 ### What's already strong
+
 - Clean editorial homepage (hero collage, featured carousel, editorial banner) — on
   par with Finisterre/Passenger.
 - CMS-driven content, wishlist, newsletter capture, gift cards, loyalty + referrals,
@@ -91,6 +92,7 @@ Billabong, Roxy, Vitamin A, Hunza G**, and slow-fashion DTC (**Sézane, Asket**)
 ### Recommendations (clearly prioritised)
 
 **Tier 1 — conversion & trust (do first)**
+
 1. **Product reviews / UGC.** No social proof on PDPs today. Add a lightweight
    reviews system (or Trustpilot/Okendo embed). Single biggest conversion lever for
    this category — every peer has it.
@@ -102,21 +104,18 @@ Billabong, Roxy, Vitamin A, Hunza G**, and slow-fashion DTC (**Sézane, Asket**)
    lead time. Reduces abandonment for an unknown brand.
 
 **Tier 2 — discovery & merchandising**
-5. **"Shop the look" / outfit bundling** on PDPs and editorial — coastal brands sell
-   the lifestyle; cross-sell tees+shorts+accessories.
-6. **Collection filtering polish** — you have colour/size/price/sort; add "in stock"
-   and fabric/feature facets as the catalogue grows.
-7. **Richer collection landing copy + imagery** (ties to SEO-4).
-8. **Recently viewed** + **"you may also like"** on PDP (uses existing product data).
+
+- **"Shop the look" / outfit bundling** on PDPs and editorial — coastal brands sell the lifestyle; cross-sell tees + shorts + accessories.
+- **Collection filtering polish** — you have colour/size/price/sort; add "in stock" and fabric/feature facets as the catalogue grows.
+- **Richer collection landing copy + imagery** (ties to SEO-4).
+- **Recently viewed** + **"you may also like"** on PDP (uses existing product data).
 
 **Tier 3 — brand & retention**
-9. **Editorial → product linking.** Journal posts should deep-link to featured
-   products ("shop this story"). Big for SEO + discovery.
-10. **Email flows beyond transactional** — welcome series, post-purchase, win-back.
-    Resend + the loyalty engine are already in place to power these.
-11. **Instagram feed / UGC gallery** on homepage (you're now auto-posting — close the
-    loop and pull it back onto the site).
-12. **Size/fit quiz** for swimwear — reduces returns, a known pain point in swim.
+
+- **Editorial → product linking.** Journal posts should deep-link to featured products ("shop this story"). Big for SEO + discovery.
+- **Email flows beyond transactional** — welcome series, post-purchase, win-back. Resend + the loyalty engine are already in place to power these.
+- **Instagram feed / UGC gallery** on homepage (you're now auto-posting — close the loop and pull it back onto the site).
+- **Size/fit quiz** for swimwear — reduces returns, a known pain point in swim.
 
 ---
 
@@ -125,6 +124,7 @@ Billabong, Roxy, Vitamin A, Hunza G**, and slow-fashion DTC (**Sézane, Asket**)
 Benchmarked against **Shopify admin, Medusa, Saleor, and Linear-style ops tooling.**
 
 ### What's already strong
+
 - Genuinely broad: orders, products, collections + bulk tagger, CMS, blog, social
   (now with autopilot + drag-reorder), emails (editable templates), gift cards, store
   credit, financial exports (CSV/PDF), refunds, notifications, settings with audit log,
@@ -135,6 +135,7 @@ Benchmarked against **Shopify admin, Medusa, Saleor, and Linear-style ops toolin
 ### Recommendations (clearly prioritised)
 
 **Tier 1 — daily-driver ergonomics**
+
 1. **Global search + command palette** (orders by #/email, products, customers).
    Shopify/Linear's most-used feature; biggest time-saver as volume grows.
 2. **Bulk actions on lists** (orders: fulfil/refund/export selected; products:
@@ -146,23 +147,18 @@ Benchmarked against **Shopify admin, Medusa, Saleor, and Linear-style ops toolin
    already has a status banner pattern to reuse).
 
 **Tier 2 — visibility & safety**
-5. **Dashboard KPIs** — today's sales, orders awaiting action, failed fulfilments,
-   outstanding store-credit liability, abandoned carts. The data exists; surface it.
-6. **Audit log everywhere** — settings already log; extend to refunds, store-credit
-   grants, product/price edits (who changed what, when).
-7. **Optimistic concurrency on edits** — warn if two staff edit the same product/order.
-8. **Order timeline** — a single chronological view per order (paid → fulfilled →
-   shipped → refunded, with email/webhook events).
+
+- **Dashboard KPIs** — today's sales, orders awaiting action, failed fulfilments, outstanding store-credit liability, abandoned carts. The data exists; surface it.
+- **Audit log everywhere** — settings already log; extend to refunds, store-credit grants, product/price edits (who changed what, when).
+- **Optimistic concurrency on edits** — warn if two staff edit the same product/order.
+- **Order timeline** — a single chronological view per order (paid → fulfilled → shipped → refunded, with email/webhook events).
 
 **Tier 3 — growth tooling**
-9. **Discounts/promotions manager** — currently student + newsletter codes are
-   bespoke; a general code/automatic-discount engine would help campaigns.
-10. **Customer view** — per-customer order history, store-credit balance, referrals,
-    LTV. (Loyalty data is there; no consolidated customer screen.)
-11. **Scheduled content** — blog already supports scheduling; mirror the social
-    autopilot UX for blog publishing.
-12. **Role granularity** — master/regular today; consider per-section permissions as
-    the team grows.
+
+- **Discounts/promotions manager** — currently student + newsletter codes are bespoke; a general code/automatic-discount engine would help campaigns.
+- **Customer view** — per-customer order history, store-credit balance, referrals, LTV. (Loyalty data is there; no consolidated customer screen.)
+- **Scheduled content** — blog already supports scheduling; mirror the social autopilot UX for blog publishing.
+- **Role granularity** — master/regular today; consider per-section permissions as the team grows.
 
 ---
 
