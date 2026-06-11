@@ -12,6 +12,16 @@ import {
   toggleAutopilot,
 } from "./actions";
 
+type Draft = {
+  id: string;
+  image_url: string | null;
+  caption: string | null;
+  status: string;
+  platform_targets: string[];
+  scheduled_at: string | null;
+  created_at: string;
+};
+
 export default async function AdminSocial() {
   await requireStaff();
   const images = await listImages();
@@ -23,17 +33,11 @@ export default async function AdminSocial() {
     .order("scheduled_at", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false })
     .limit(60);
-  const drafts =
-    (data as unknown as Array<{
-      id: string;
-      image_url: string | null;
-      caption: string | null;
-      status: string;
-      platform_targets: string[];
-      scheduled_at: string | null;
-      created_at: string;
-    }>) || [];
-  const scheduledCount = drafts.filter((d) => d.status === "scheduled").length;
+  const drafts = (data as unknown as Draft[]) || [];
+  const scheduled = drafts.filter((d) => d.status === "scheduled");
+  const plainDrafts = drafts.filter((d) => d.status === "draft");
+  const done = drafts.filter((d) => d.status === "posted" || d.status === "failed");
+  const scheduledCount = scheduled.length;
   const slotLabel = SLOT_HOURS_UTC.map((h) => `${String(h).padStart(2, "0")}:00`).join(" & ");
 
   return (
@@ -122,73 +126,40 @@ export default async function AdminSocial() {
         </ul>
       )}
 
+      {/* ── Scheduled (the queue) ──────────────────────────────────────────── */}
       <h2 className="mt-12 font-mono text-caption tracking-wide text-ink/60 uppercase">
-        Queue &amp; drafts ({drafts.length})
+        Scheduled ({scheduled.length})
       </h2>
+      <p className="mt-1 font-mono text-caption text-ink/40">
+        Auto-publish at their time, or hit “Post now” to send any one immediately.
+      </p>
       <ul className="mt-4 space-y-3">
-        {drafts.map((d) => (
+        {scheduled.map((d) => (
           <li key={d.id} className="flex gap-5 rounded-sm border border-ink/10 p-4">
-            {d.image_url && (
-              <Image
-                src={d.image_url}
-                alt=""
-                width={96}
-                height={96}
-                unoptimized
-                className="h-24 w-24 shrink-0 rounded-sm object-cover"
-              />
-            )}
+            <DraftImage src={d.image_url} />
             <div className="flex-1">
               <p className="whitespace-pre-line font-body text-body text-ink">
                 {d.caption ?? "(no caption)"}
               </p>
-              <p className="mt-2 font-mono text-caption text-ink/50">
-                {d.status}
-                {d.status === "scheduled" && d.scheduled_at
-                  ? ` for ${new Date(d.scheduled_at).toLocaleString()}`
-                  : ` · ${new Date(d.created_at).toLocaleString()}`}
+              <p className="mt-2 font-mono text-caption text-accent-sun">
+                {d.scheduled_at
+                  ? `Scheduled for ${new Date(d.scheduled_at).toLocaleString("en-GB")}`
+                  : "Scheduled"}
               </p>
             </div>
-            <div className="flex w-56 shrink-0 flex-col gap-2">
-              {d.status === "draft" && (
-                <>
-                  <form action={postDraft}>
-                    <input type="hidden" name="id" value={d.id} />
-                    <button className="w-full rounded-sm bg-accent-sun px-3 py-1 font-mono text-caption tracking-widest text-surface uppercase">
-                      Post now
-                    </button>
-                  </form>
-                  {/* Schedule: pick a future time; the hourly cron publishes it. */}
-                  <form action={scheduleDraft} className="flex flex-col gap-1.5">
-                    <input type="hidden" name="id" value={d.id} />
-                    <input
-                      type="datetime-local"
-                      name="scheduled_at"
-                      required
-                      className="rounded-sm border border-ink/20 bg-surface px-2 py-1 font-mono text-caption text-ink"
-                    />
-                    <button className="rounded-sm border border-ink/30 px-3 py-1 font-mono text-caption tracking-widest text-ink uppercase transition-colors hover:border-ink/60">
-                      Schedule
-                    </button>
-                  </form>
-                </>
-              )}
-              {d.status === "scheduled" && (
-                <>
-                  <form action={postDraft}>
-                    <input type="hidden" name="id" value={d.id} />
-                    <button className="w-full rounded-sm bg-accent-sun px-3 py-1 font-mono text-caption tracking-widest text-surface uppercase">
-                      Post now
-                    </button>
-                  </form>
-                  <form action={unscheduleDraft}>
-                    <input type="hidden" name="id" value={d.id} />
-                    <button className="w-full rounded-sm border border-ink/30 px-3 py-1 font-mono text-caption tracking-widest text-ink uppercase transition-colors hover:border-ink/60">
-                      Unschedule
-                    </button>
-                  </form>
-                </>
-              )}
+            <div className="flex w-44 shrink-0 flex-col gap-2">
+              <form action={postDraft}>
+                <input type="hidden" name="id" value={d.id} />
+                <button className="w-full rounded-sm bg-accent-sun px-3 py-1.5 font-mono text-caption tracking-widest text-surface uppercase">
+                  Post now
+                </button>
+              </form>
+              <form action={unscheduleDraft}>
+                <input type="hidden" name="id" value={d.id} />
+                <button className="w-full rounded-sm border border-ink/30 px-3 py-1 font-mono text-caption tracking-widest text-ink uppercase transition-colors hover:border-ink/60">
+                  Unschedule
+                </button>
+              </form>
               <form action={deleteDraft}>
                 <input type="hidden" name="id" value={d.id} />
                 <button className="font-mono text-caption tracking-widest text-ink/50 uppercase underline-offset-4 hover:underline">
@@ -198,8 +169,125 @@ export default async function AdminSocial() {
             </div>
           </li>
         ))}
-        {drafts.length === 0 && <p className="font-body text-body text-ink/50">No drafts.</p>}
+        {scheduled.length === 0 && (
+          <p className="font-body text-body text-ink/50">
+            Nothing scheduled yet. Turn on Autopilot above, or schedule a draft below.
+          </p>
+        )}
       </ul>
+
+      {/* ── Drafts (not yet scheduled) ─────────────────────────────────────── */}
+      <h2 className="mt-12 font-mono text-caption tracking-wide text-ink/60 uppercase">
+        Drafts ({plainDrafts.length})
+      </h2>
+      <ul className="mt-4 space-y-3">
+        {plainDrafts.map((d) => (
+          <li key={d.id} className="flex gap-5 rounded-sm border border-ink/10 p-4">
+            <DraftImage src={d.image_url} />
+            <div className="flex-1">
+              <p className="whitespace-pre-line font-body text-body text-ink">
+                {d.caption ?? "(no caption)"}
+              </p>
+              <p className="mt-2 font-mono text-caption text-ink/50">
+                Draft · {new Date(d.created_at).toLocaleString("en-GB")}
+              </p>
+            </div>
+            <div className="flex w-44 shrink-0 flex-col gap-2">
+              <form action={postDraft}>
+                <input type="hidden" name="id" value={d.id} />
+                <button className="w-full rounded-sm bg-accent-sun px-3 py-1.5 font-mono text-caption tracking-widest text-surface uppercase">
+                  Post now
+                </button>
+              </form>
+              {/* Schedule: pick a future time; the hourly cron publishes it. */}
+              <form action={scheduleDraft} className="flex flex-col gap-1.5">
+                <input type="hidden" name="id" value={d.id} />
+                <input
+                  type="datetime-local"
+                  name="scheduled_at"
+                  required
+                  className="rounded-sm border border-ink/20 bg-surface px-2 py-1 font-mono text-caption text-ink"
+                />
+                <button className="rounded-sm border border-ink/30 px-3 py-1 font-mono text-caption tracking-widest text-ink uppercase transition-colors hover:border-ink/60">
+                  Schedule
+                </button>
+              </form>
+              <form action={deleteDraft}>
+                <input type="hidden" name="id" value={d.id} />
+                <button className="font-mono text-caption tracking-widest text-ink/50 uppercase underline-offset-4 hover:underline">
+                  Discard
+                </button>
+              </form>
+            </div>
+          </li>
+        ))}
+        {plainDrafts.length === 0 && (
+          <p className="font-body text-body text-ink/50">
+            No drafts. Generate one from a photo above.
+          </p>
+        )}
+      </ul>
+
+      {/* ── Recently posted / failed ───────────────────────────────────────── */}
+      {done.length > 0 && (
+        <>
+          <h2 className="mt-12 font-mono text-caption tracking-wide text-ink/60 uppercase">
+            Recent ({done.length})
+          </h2>
+          <ul className="mt-4 space-y-3">
+            {done.map((d) => (
+              <li
+                key={d.id}
+                className="flex items-center gap-5 rounded-sm border border-ink/10 p-3 opacity-75"
+              >
+                <DraftImage src={d.image_url} small />
+                <div className="flex-1">
+                  <p className="line-clamp-2 font-body text-caption text-ink/70">
+                    {d.caption ?? "(no caption)"}
+                  </p>
+                  <p className="mt-1 font-mono text-caption">
+                    <span className={d.status === "posted" ? "text-green-700" : "text-red-600"}>
+                      {d.status === "posted" ? "Posted" : "Failed"}
+                    </span>{" "}
+                    <span className="text-ink/40">
+                      · {new Date(d.created_at).toLocaleString("en-GB")}
+                    </span>
+                  </p>
+                </div>
+                {d.status === "failed" && (
+                  <form action={postDraft}>
+                    <input type="hidden" name="id" value={d.id} />
+                    <button className="rounded-sm border border-ink/30 px-3 py-1 font-mono text-caption tracking-widest text-ink uppercase transition-colors hover:border-ink/60">
+                      Retry
+                    </button>
+                  </form>
+                )}
+                <form action={deleteDraft}>
+                  <input type="hidden" name="id" value={d.id} />
+                  <button className="font-mono text-caption tracking-widest text-ink/40 uppercase underline-offset-4 hover:underline">
+                    Remove
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
+  );
+}
+
+function DraftImage({ src, small = false }: { src: string | null; small?: boolean }) {
+  if (!src) return null;
+  const size = small ? 56 : 96;
+  return (
+    <Image
+      src={src}
+      alt=""
+      width={size}
+      height={size}
+      unoptimized
+      className={`${small ? "h-14 w-14" : "h-24 w-24"} shrink-0 rounded-sm object-cover`}
+    />
   );
 }

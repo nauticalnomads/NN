@@ -131,10 +131,15 @@ type DraftRow = {
   status: string;
 };
 
+// Statuses a post can be dispatched from: not-yet-sent (draft/scheduled) plus
+// `failed` so the "Retry" button can re-send. A successful `posted` row is never
+// re-dispatched.
+const DISPATCHABLE = ["draft", "scheduled", "failed"];
+
 // Publish one draft via the Make.com webhook and record the outcome. Idempotent
-// guard: only acts on a draft that's still `draft` or `scheduled` (so a cron
-// run racing the manual button, or a double cron fire, can't double-post).
-// Returns true if the webhook accepted the post.
+// guard: only acts on a draft that's still dispatchable (so a cron run racing
+// the manual button, or a double cron fire, can't double-post). Returns true if
+// the webhook accepted the post.
 export async function dispatchSocialPost(draftId: string): Promise<boolean> {
   const sb = createServiceClient();
 
@@ -152,7 +157,7 @@ export async function dispatchSocialPost(draftId: string): Promise<boolean> {
     .eq("id", draftId)
     .maybeSingle();
   const d = draftData as unknown as DraftRow | null;
-  if (!d || (d.status !== "draft" && d.status !== "scheduled")) return false;
+  if (!d || !DISPATCHABLE.includes(d.status)) return false;
 
   let posted = false;
   if (webhook) {
@@ -172,8 +177,8 @@ export async function dispatchSocialPost(draftId: string): Promise<boolean> {
     }
   }
 
-  // CAS on status: only flip if still draft/scheduled, so concurrent dispatchers
-  // can't both mark it (and a failed publish drops back so it can be retried).
+  // CAS on status: only flip if still dispatchable, so concurrent dispatchers
+  // can't both mark it (and a failed publish stays `failed` so it can be retried).
   await sb
     .from("social_drafts")
     .update({
@@ -181,7 +186,7 @@ export async function dispatchSocialPost(draftId: string): Promise<boolean> {
       posted_at: posted ? new Date().toISOString() : null,
     } as never)
     .eq("id", draftId)
-    .in("status", ["draft", "scheduled"]);
+    .in("status", DISPATCHABLE);
 
   return posted;
 }
