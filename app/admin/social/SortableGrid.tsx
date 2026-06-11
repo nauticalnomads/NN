@@ -31,7 +31,7 @@ export function SortableGrid({ tiles }: { tiles: Tile[] }) {
       <div className="mt-4 flex items-center justify-between gap-4">
         <p className="font-mono text-caption text-ink/40">
           Drag photos to set the posting order — top-left posts first. Nothing reschedules until you
-          save.
+          save. Captions are written in the background after saving (or hit Regenerate on a post).
         </p>
         <form action={saveSocialOrder} onSubmit={() => setDirty(false)}>
           <input type="hidden" name="order" value={JSON.stringify(items.map((t) => t.id))} />
