@@ -1,15 +1,17 @@
-import type { Metadata } from "next";
 import { Container } from "@/components/Container";
+import { JsonLd } from "@/components/seo/JsonLd";
 import { getCmsValue } from "@/lib/cms";
-import { absoluteUrl } from "@/lib/site";
+import { pageMetadata } from "@/lib/seo";
+import { faqLd } from "@/lib/structured-data";
 import { FaqAccordion, type Faq } from "./FaqAccordion";
 import { ContactForm } from "./ContactForm";
 
-export const metadata: Metadata = {
-  title: "Help & Contact",
-  description: "Questions, orders, returns — we're here.",
-  alternates: { canonical: absoluteUrl("/help") },
-};
+export const metadata = pageMetadata({
+  title: "Help & Contact — Orders, Shipping, Returns",
+  description:
+    "Answers on orders, shipping, returns and sizing for Nautical Nomads — plus a contact form to reach the team.",
+  path: "/help",
+});
 
 const DEFAULT_FAQ: Faq[] = [
   {
@@ -36,6 +38,7 @@ export default async function Help() {
 
   return (
     <Container className="py-16">
+      <JsonLd data={faqLd(faq)} />
       <h1 className="font-display text-display-2 font-semibold tracking-tight text-deep-ink">
         Help &amp; Contact
       </h1>
