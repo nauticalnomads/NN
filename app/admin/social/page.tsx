@@ -1,16 +1,23 @@
 import Image from "next/image";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
-import { listImages, driveImageUrl, driveThumbnailUrl } from "@/lib/google-drive";
-import { getAutopilot, QUEUE_TARGET, SLOT_HOURS_UTC } from "@/lib/social";
+import { listImages, driveThumbnailUrl } from "@/lib/google-drive";
 import {
-  createDraft,
+  getAutopilot,
+  getImageOrder,
+  applyImageOrder,
+  QUEUE_TARGET,
+  SLOT_HOURS_UTC,
+} from "@/lib/social";
+import {
   postDraft,
   deleteDraft,
   scheduleDraft,
   unscheduleDraft,
   toggleAutopilot,
+  regenerateCaption,
 } from "./actions";
+import { SortableGrid } from "./SortableGrid";
 
 type Draft = {
   id: string;
@@ -25,8 +32,16 @@ type Draft = {
 
 export default async function AdminSocial() {
   await requireStaff();
-  const images = await listImages();
-  const autopilot = await getAutopilot();
+  const [images, autopilot, imageOrder] = await Promise.all([
+    listImages(),
+    getAutopilot(),
+    getImageOrder(),
+  ]);
+  const tiles = applyImageOrder(images, imageOrder).map((img) => ({
+    id: img.id,
+    name: img.name,
+    thumb: img.thumbnailLink || driveThumbnailUrl(img.id, 400),
+  }));
   const sb = createServiceClient();
   const { data } = await sb
     .from("social_drafts")
@@ -118,6 +133,12 @@ export default async function AdminSocial() {
                   Post now
                 </button>
               </form>
+              <form action={regenerateCaption}>
+                <input type="hidden" name="id" value={d.id} />
+                <button className="w-full rounded-sm border border-ink/30 px-3 py-1 font-mono text-caption tracking-widest text-ink uppercase transition-colors hover:border-ink/60">
+                  Regenerate
+                </button>
+              </form>
               <form action={unscheduleDraft}>
                 <input type="hidden" name="id" value={d.id} />
                 <button className="w-full rounded-sm border border-ink/30 px-3 py-1 font-mono text-caption tracking-widest text-ink uppercase transition-colors hover:border-ink/60">
@@ -135,7 +156,8 @@ export default async function AdminSocial() {
         ))}
         {scheduled.length === 0 && (
           <p className="font-body text-body text-ink/50">
-            Nothing scheduled yet. Turn on Autopilot above, or schedule a draft below.
+            Nothing scheduled yet. Set the grid order below and hit “Save order”, or turn on
+            Autopilot above.
           </p>
         )}
       </ul>
@@ -176,6 +198,12 @@ export default async function AdminSocial() {
                   Schedule
                 </button>
               </form>
+              <form action={regenerateCaption}>
+                <input type="hidden" name="id" value={d.id} />
+                <button className="w-full rounded-sm border border-ink/30 px-3 py-1 font-mono text-caption tracking-widest text-ink uppercase transition-colors hover:border-ink/60">
+                  Regenerate
+                </button>
+              </form>
               <form action={deleteDraft}>
                 <input type="hidden" name="id" value={d.id} />
                 <button className="font-mono text-caption tracking-widest text-ink/50 uppercase underline-offset-4 hover:underline">
@@ -187,45 +215,21 @@ export default async function AdminSocial() {
         ))}
         {plainDrafts.length === 0 && (
           <p className="font-body text-body text-ink/50">
-            No drafts. Generate one from a photo below.
+            No drafts. Use the grid below and hit “Save order” to generate the queue.
           </p>
         )}
       </ul>
 
-      {/* ── Drive photos (generate new drafts) ─────────────────────────────── */}
+      {/* ── Drive photos grid (drag to set posting order) ──────────────────── */}
       <h2 className="mt-12 font-mono text-caption tracking-wide text-ink/60 uppercase">
-        Photos in Drive ({images.length})
+        Grid order — photos in Drive ({images.length})
       </h2>
       {images.length === 0 ? (
         <p className="mt-3 font-body text-body text-ink/50">
-          No photos. Check GOOGLE_SERVICE_ACCOUNT_JSON + GOOGLE_DRIVE_FOLDER_ID env vars.
+          No photos. Check the Google Drive connection in Settings → Social automation.
         </p>
       ) : (
-        <ul className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {images.map((img) => (
-            <li key={img.id} className="rounded-sm border border-ink/10 p-3">
-              <div className="relative aspect-square w-full overflow-hidden rounded-sm bg-ink/5">
-                {/* Drive thumbnail endpoint — renders directly in <img>, unoptimized
-                    so we don't have to whitelist + run it through the optimizer. */}
-                <Image
-                  src={img.thumbnailLink || driveThumbnailUrl(img.id)}
-                  alt={img.name}
-                  fill
-                  unoptimized
-                  className="object-cover"
-                />
-              </div>
-              <p className="mt-2 truncate font-mono text-caption text-ink/70">{img.name}</p>
-              <form action={createDraft} className="mt-2">
-                <input type="hidden" name="drive_id" value={img.id} />
-                <input type="hidden" name="image_url" value={driveImageUrl(img.id)} />
-                <button className="w-full rounded-sm bg-ink py-1 font-mono text-caption tracking-widest text-surface uppercase">
-                  Generate caption
-                </button>
-              </form>
-            </li>
-          ))}
-        </ul>
+        <SortableGrid tiles={tiles} />
       )}
 
       {/* ── Recently posted / failed ───────────────────────────────────────── */}
