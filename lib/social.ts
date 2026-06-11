@@ -57,6 +57,62 @@ export async function setAutopilot(on: boolean): Promise<void> {
     .eq("id", true);
 }
 
+// Saved drag-order of Drive file ids (Instagram-style grid). Drives the sequence
+// posts are scheduled in. Unknown/new images fall back to name order.
+export async function getImageOrder(): Promise<string[]> {
+  try {
+    const sb = createServiceClient();
+    const { data } = await sb
+      .from("store_settings")
+      .select("social_image_order")
+      .eq("id", true)
+      .maybeSingle();
+    const v = (data as unknown as { social_image_order?: string[] } | null)?.social_image_order;
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function setImageOrder(order: string[]): Promise<void> {
+  const sb = createServiceClient();
+  await sb
+    .from("store_settings")
+    .update({ social_image_order: order } as never)
+    .eq("id", true);
+}
+
+async function brandVoice(): Promise<string> {
+  const sb = createServiceClient();
+  const { data } = await sb
+    .from("store_settings")
+    .select("brand_voice")
+    .eq("id", true)
+    .maybeSingle();
+  return (data as unknown as { brand_voice: string } | null)?.brand_voice || "";
+}
+
+// Generate a caption for one Drive image (resized thumbnail to stay under the
+// vision model's size limit). Returns "" if captioning is unavailable.
+async function captionFor(fileId: string, voice: string): Promise<string> {
+  const captionUrl = (await driveCaptionUrl(fileId)) ?? driveImageUrl(fileId);
+  return (await captionImage(captionUrl, voice)) ?? "";
+}
+
+// Drive images sorted by the saved drag-order; anything not in the order is
+// appended in name order so new uploads still appear (at the end).
+export function applyImageOrder<T extends { id: string; name: string }>(
+  images: T[],
+  order: string[],
+): T[] {
+  const rank = new Map(order.map((id, i) => [id, i]));
+  return [...images].sort((a, b) => {
+    const ra = rank.has(a.id) ? (rank.get(a.id) as number) : Number.MAX_SAFE_INTEGER;
+    const rb = rank.has(b.id) ? (rank.get(b.id) as number) : Number.MAX_SAFE_INTEGER;
+    return ra - rb || a.name.localeCompare(b.name);
+  });
+}
+
 type QueueRow = { image_ref: string | null; scheduled_at: string | null; status: string };
 
 // Refill the scheduled queue to QUEUE_TARGET when autopilot is on. Picks Drive
@@ -82,12 +138,14 @@ export async function topUpSocialDrafts(): Promise<number> {
   const need = Math.min(QUEUE_TARGET - scheduledCount, TOPUP_BATCH);
   if (need <= 0) return 0;
 
-  // Spread reuse: prefer images with the fewest copies already in the queue.
+  // Follow the saved drag-order. Prefer images with the fewest copies already in
+  // the queue (so we cycle through the library in order before repeating).
+  const order = await getImageOrder();
   const useCount = new Map<string, number>();
   for (const r of queue)
     if (r.image_ref) useCount.set(r.image_ref, (useCount.get(r.image_ref) ?? 0) + 1);
-  const ordered = [...images].sort(
-    (a, b) => (useCount.get(a.id) ?? 0) - (useCount.get(b.id) ?? 0) || a.name.localeCompare(b.name),
+  const ordered = applyImageOrder(images, order).sort(
+    (a, b) => (useCount.get(a.id) ?? 0) - (useCount.get(b.id) ?? 0),
   );
   const picks = ordered.slice(0, need);
 
@@ -97,20 +155,12 @@ export async function topUpSocialDrafts(): Promise<number> {
     .map((r) => new Date(r.scheduled_at as string).getTime())
     .reduce((m, t) => Math.max(m, t), Date.now());
   const slots = nextSlots(picks.length, new Date(tail));
-
-  // Brand voice for captions.
-  const { data: settingsData } = await sb
-    .from("store_settings")
-    .select("brand_voice")
-    .eq("id", true)
-    .maybeSingle();
-  const voice = (settingsData as unknown as { brand_voice: string } | null)?.brand_voice || "";
+  const voice = await brandVoice();
 
   let made = 0;
   for (let i = 0; i < picks.length; i++) {
     const img = picks[i];
-    const captionUrl = (await driveCaptionUrl(img.id)) ?? driveImageUrl(img.id);
-    const caption = (await captionImage(captionUrl, voice)) ?? "";
+    const caption = await captionFor(img.id, voice);
     const { error } = await sb.from("social_drafts").insert({
       image_ref: img.id,
       image_url: driveImageUrl(img.id),
@@ -122,6 +172,59 @@ export async function topUpSocialDrafts(): Promise<number> {
     if (!error) made += 1;
   }
   return made;
+}
+
+// Rebuild the scheduled queue from scratch in the saved drag-order. Clears
+// not-yet-published rows (draft + scheduled), then schedules the first
+// QUEUE_TARGET images (in order) at the next 10:00/17:00 GMT slots, captioning
+// each. Heavy (one caption call per post) — run inside after() from the action.
+export async function rebuildQueueFromOrder(): Promise<number> {
+  const sb = createServiceClient();
+  const images = await listImages();
+  if (images.length === 0) return 0;
+
+  const order = await getImageOrder();
+  const picks = applyImageOrder(images, order).slice(0, QUEUE_TARGET);
+
+  // Wipe the pending queue (keep posted/failed history).
+  await sb.from("social_drafts").delete().in("status", ["draft", "scheduled"]);
+
+  const slots = nextSlots(picks.length, new Date());
+  const voice = await brandVoice();
+
+  let made = 0;
+  for (let i = 0; i < picks.length; i++) {
+    const img = picks[i];
+    const caption = await captionFor(img.id, voice);
+    const { error } = await sb.from("social_drafts").insert({
+      image_ref: img.id,
+      image_url: driveImageUrl(img.id),
+      caption,
+      status: "scheduled",
+      scheduled_at: slots[i].toISOString(),
+      platform_targets: DEFAULT_PLATFORMS,
+    } as never);
+    if (!error) made += 1;
+  }
+  return made;
+}
+
+// Regenerate the caption for a single draft/scheduled post from its image.
+export async function regenerateDraftCaption(draftId: string): Promise<boolean> {
+  const sb = createServiceClient();
+  const { data } = await sb
+    .from("social_drafts")
+    .select("image_ref")
+    .eq("id", draftId)
+    .maybeSingle();
+  const fileId = (data as unknown as { image_ref: string | null } | null)?.image_ref;
+  if (!fileId) return false;
+  const caption = await captionFor(fileId, await brandVoice());
+  const { error } = await sb
+    .from("social_drafts")
+    .update({ caption } as never)
+    .eq("id", draftId);
+  return !error;
 }
 
 type DraftRow = {

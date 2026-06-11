@@ -4,36 +4,38 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
-import { captionImage } from "@/lib/anthropic";
-import { driveCaptionUrl } from "@/lib/google-drive";
-import { dispatchSocialPost, setAutopilot, topUpSocialDrafts } from "@/lib/social";
+import {
+  dispatchSocialPost,
+  setAutopilot,
+  topUpSocialDrafts,
+  setImageOrder,
+  rebuildQueueFromOrder,
+  regenerateDraftCaption,
+} from "@/lib/social";
 
-export async function createDraft(formData: FormData) {
-  const admin = await requireStaff();
-  const imageUrl = String(formData.get("image_url") || "");
-  const driveId = String(formData.get("drive_id") || "");
-  if (!imageUrl) return;
+// Save the dragged grid order, then rebuild the whole scheduled queue in that
+// order. Captioning every post is slow, so the heavy rebuild runs in after()
+// (the action returns immediately; captions populate over the next minute).
+export async function saveSocialOrder(formData: FormData) {
+  await requireStaff();
+  let order: string[] = [];
+  try {
+    order = JSON.parse(String(formData.get("order") || "[]"));
+  } catch {
+    order = [];
+  }
+  if (!Array.isArray(order)) order = [];
+  await setImageOrder(order.map(String));
+  after(() => rebuildQueueFromOrder());
+  revalidatePath("/admin/social");
+}
 
-  const sb = createServiceClient();
-  const { data: settingsData } = await sb
-    .from("store_settings")
-    .select("brand_voice")
-    .eq("id", true)
-    .maybeSingle();
-  const voice = (settingsData as unknown as { brand_voice: string } | null)?.brand_voice || "";
-
-  // Caption from a small, resized thumbnail — Drive originals are often multi-MB,
-  // over the vision model's per-image limit, which makes the full URL fail.
-  const captionUrl = (driveId && (await driveCaptionUrl(driveId))) || imageUrl;
-  const caption = (await captionImage(captionUrl, voice)) ?? "";
-  await sb.from("social_drafts").insert({
-    image_url: imageUrl,
-    image_ref: driveId,
-    caption,
-    status: "draft",
-    platform_targets: ["instagram", "facebook"],
-    created_by: admin.id,
-  } as never);
+// Regenerate one post's caption from its image.
+export async function regenerateCaption(formData: FormData) {
+  await requireStaff();
+  const id = String(formData.get("id") || "");
+  if (!id) return;
+  await regenerateDraftCaption(id);
   revalidatePath("/admin/social");
 }
 
