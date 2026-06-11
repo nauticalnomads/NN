@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { Container } from "@/components/Container";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { createClient } from "@/lib/supabase/server";
-import { absoluteUrl, site } from "@/lib/site";
+import { pageMetadata } from "@/lib/seo";
+import { articleLd, breadcrumbLd } from "@/lib/structured-data";
 import { renderMarkdown } from "@/lib/markdown";
 
 export const revalidate = 300;
@@ -46,11 +47,12 @@ export async function generateMetadata({
   const { slug } = await params;
   const p = await getPost(slug);
   if (!p) return { title: "Not found" };
-  return {
+  return pageMetadata({
     title: p.seo_title || p.title,
-    description: p.seo_description ?? undefined,
-    alternates: { canonical: absoluteUrl(`/journal/${p.slug}`) },
-  };
+    description: p.seo_description || `${p.title} — slow notes from the coast by Nautical Nomads.`,
+    path: `/journal/${p.slug}`,
+    image: p.cover_image_url || undefined,
+  });
 }
 
 export default async function Post({ params }: { params: Promise<{ slug: string }> }) {
@@ -59,15 +61,12 @@ export default async function Post({ params }: { params: Promise<{ slug: string 
   if (!p) notFound();
   return (
     <Container className="py-16">
+      <JsonLd data={articleLd(p)} />
       <JsonLd
-        data={{
-          "@context": "https://schema.org",
-          "@type": "Article",
-          headline: p.title,
-          url: absoluteUrl(`/journal/${p.slug}`),
-          datePublished: p.published_at,
-          author: { "@type": "Organization", name: site.name },
-        }}
+        data={breadcrumbLd([
+          { name: "Journal", path: "/journal" },
+          { name: p.title, path: `/journal/${p.slug}` },
+        ])}
       />
       <article className="max-w-2xl">
         {p.cover_image_url && (

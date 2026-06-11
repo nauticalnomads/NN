@@ -1,12 +1,12 @@
-import type { Metadata } from "next";
 import { Prose } from "@/components/Prose";
-import { absoluteUrl } from "@/lib/site";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "About",
-  description: "Not a surf brand, not a sailing brand. A brand for everyone drifting toward water.",
-  alternates: { canonical: absoluteUrl("/about") },
-};
+export const metadata = pageMetadata({
+  title: "About — Coastal Lifestyle Clothing",
+  description:
+    "Not a surf brand, not a sailing brand. Nautical Nomads makes understated coastal clothing and swimwear for everyone drifting toward the water.",
+  path: "/about",
+});
 
 export default function About() {
   return (

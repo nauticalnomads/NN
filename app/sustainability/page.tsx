@@ -1,12 +1,12 @@
-import type { Metadata } from "next";
 import { Prose } from "@/components/Prose";
-import { absoluteUrl } from "@/lib/site";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Sustainability",
-  description: "Slow design, fewer pieces, made to last.",
-  alternates: { canonical: absoluteUrl("/sustainability") },
-};
+export const metadata = pageMetadata({
+  title: "Sustainability — Slow, Made-to-Order",
+  description:
+    "Slow design, fewer pieces, made to last. How Nautical Nomads keeps waste low with made-to-order coastal clothing and swimwear.",
+  path: "/sustainability",
+});
 
 export default function Sustainability() {
   return (

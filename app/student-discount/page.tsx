@@ -1,13 +1,13 @@
-import type { Metadata } from "next";
 import { Container } from "@/components/Container";
-import { absoluteUrl } from "@/lib/site";
+import { pageMetadata } from "@/lib/seo";
 import { RevealForm } from "./RevealForm";
 
-export const metadata: Metadata = {
-  title: "Student Discount",
-  description: "5% off for students, all year round — verify with your university email.",
-  alternates: { canonical: absoluteUrl("/student-discount") },
-};
+export const metadata = pageMetadata({
+  title: "Student Discount — 5% Off Year-Round",
+  description:
+    "Students get 5% off Nautical Nomads coastal clothing all year round. Verify with your university email and start saving today.",
+  path: "/student-discount",
+});
 
 export default function StudentDiscount() {
   return (

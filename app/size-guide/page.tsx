@@ -1,12 +1,12 @@
-import type { Metadata } from "next";
 import { Prose } from "@/components/Prose";
-import { absoluteUrl } from "@/lib/site";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Size Guide",
-  description: "Measurements for our tees, sweats and hoodies. Cut a little relaxed.",
-  alternates: { canonical: absoluteUrl("/size-guide") },
-};
+export const metadata = pageMetadata({
+  title: "Size Guide — Tees, Sweats & Hoodies",
+  description:
+    "Find your fit. Measurements for Nautical Nomads tees, sweats and hoodies — cut a little relaxed for easy coastal wear.",
+  path: "/size-guide",
+});
 
 const ROWS = [
   ["S", "36–38", "27"],

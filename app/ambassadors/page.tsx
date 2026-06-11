@@ -1,14 +1,14 @@
-import type { Metadata } from "next";
 import Image from "next/image";
 import { Container } from "@/components/Container";
 import { getCmsValue } from "@/lib/cms";
-import { absoluteUrl } from "@/lib/site";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
   title: "Ambassadors",
-  description: "The people who wear it where the water meets the land.",
-  alternates: { canonical: absoluteUrl("/ambassadors") },
-};
+  description:
+    "Meet the Nautical Nomads ambassadors — the people who wear our coastal clothing where the water meets the land. Join the crew.",
+  path: "/ambassadors",
+});
 
 type Ambassador = { name?: string; role?: string; image?: string; social?: string };
 

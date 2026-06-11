@@ -6,8 +6,8 @@ import { Container } from "@/components/Container";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { PlpFilters } from "@/components/storefront/PlpFilters";
 import { getCollectionBySlug, getChildCollections } from "@/lib/queries";
-import { breadcrumbLd } from "@/lib/structured-data";
-import { absoluteUrl } from "@/lib/site";
+import { breadcrumbLd, collectionLd } from "@/lib/structured-data";
+import { pageMetadata } from "@/lib/seo";
 
 // Rendered per-request. We deliberately do NOT prerender via generateStaticParams:
 // with zero published collections that returns an empty list, and an ISR route
@@ -24,11 +24,16 @@ export async function generateMetadata({
   const result = await getCollectionBySlug(slug);
   if (!result) return { title: "Not found" };
   const { collection } = result;
-  return {
-    title: collection.seo_title || collection.title,
-    description: collection.seo_description || collection.description || undefined,
-    alternates: { canonical: absoluteUrl(`/collections/${collection.slug}`) },
-  };
+  const c = collection as typeof collection & { hero_image_url?: string | null };
+  return pageMetadata({
+    title: c.seo_title || c.title,
+    description:
+      c.seo_description ||
+      c.description ||
+      `Shop the ${c.title} collection — coastal lifestyle clothing from Nautical Nomads, printed quietly and made to last.`,
+    path: `/collections/${c.slug}`,
+    image: c.hero_image_url || undefined,
+  });
 }
 
 export default async function CollectionPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -52,6 +57,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
 
   return (
     <div>
+      <JsonLd data={collectionLd(col)} />
       {/* §5.1 Collection hero */}
       {col.hero_image_url ? (
         <div className="relative h-[35vh] min-h-56 w-full overflow-hidden">

@@ -1,20 +1,20 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { Container } from "@/components/Container";
 import { ProductGrid } from "@/components/ProductGrid";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { getProducts } from "@/lib/queries";
 import { breadcrumbLd } from "@/lib/structured-data";
-import { absoluteUrl } from "@/lib/site";
+import { pageMetadata } from "@/lib/seo";
 
 export const revalidate = 300;
 const PAGE_SIZE = 24;
 
-export const metadata: Metadata = {
-  title: "Shop",
-  description: "Every piece. Coastal lifestyle clothing, printed quietly.",
-  alternates: { canonical: absoluteUrl("/shop") },
-};
+export const metadata = pageMetadata({
+  title: "Shop Coastal Clothing & Swimwear",
+  description:
+    "Shop the full Nautical Nomads collection — coastal lifestyle clothing, beachwear and swimwear, printed quietly on quality fabrics made to last.",
+  path: "/shop",
+});
 
 const SORTS = [
   { key: "featured", label: "Featured" },
