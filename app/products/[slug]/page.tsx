@@ -4,8 +4,9 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { Container } from "@/components/Container";
 import { VariantSelector } from "@/components/storefront/VariantSelector";
+import { ProductGrid } from "@/components/ProductGrid";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { getProductBySlug, getProductSlugs, primaryImage } from "@/lib/queries";
+import { getProductBySlug, getProductSlugs, getRelatedProducts, primaryImage } from "@/lib/queries";
 import { productLd, breadcrumbLd } from "@/lib/structured-data";
 import { absoluteUrl } from "@/lib/site";
 
@@ -43,6 +44,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const { slug } = await params;
   const product = await getProductBySlug(slug);
   if (!product) notFound();
+
+  const related = await getRelatedProducts(product.id);
 
   const images = [...(product.product_images ?? [])].sort(
     (a, b) => Number(b.is_primary) - Number(a.is_primary) || a.sort_order - b.sort_order,
@@ -119,6 +122,15 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           )}
         </div>
       </div>
+
+      {related.length > 0 && (
+        <section className="mt-24 border-t border-ink/10 pt-12">
+          <h2 className="mb-8 font-display text-heading tracking-tight text-ink">
+            You may also like
+          </h2>
+          <ProductGrid products={related} />
+        </section>
+      )}
     </Container>
   );
 }
