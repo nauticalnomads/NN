@@ -2,17 +2,27 @@ import Image from "next/image";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { listImages, driveImageUrl } from "@/lib/google-drive";
-import { createDraft, postDraft, deleteDraft, scheduleDraft, unscheduleDraft } from "./actions";
+import { getAutopilot, QUEUE_TARGET, SLOT_HOURS_UTC } from "@/lib/social";
+import {
+  createDraft,
+  postDraft,
+  deleteDraft,
+  scheduleDraft,
+  unscheduleDraft,
+  toggleAutopilot,
+} from "./actions";
 
 export default async function AdminSocial() {
   await requireStaff();
   const images = await listImages();
+  const autopilot = await getAutopilot();
   const sb = createServiceClient();
   const { data } = await sb
     .from("social_drafts")
     .select("id, image_url, caption, status, platform_targets, scheduled_at, created_at")
+    .order("scheduled_at", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false })
-    .limit(30);
+    .limit(60);
   const drafts =
     (data as unknown as Array<{
       id: string;
@@ -23,6 +33,8 @@ export default async function AdminSocial() {
       scheduled_at: string | null;
       created_at: string;
     }>) || [];
+  const scheduledCount = drafts.filter((d) => d.status === "scheduled").length;
+  const slotLabel = SLOT_HOURS_UTC.map((h) => `${String(h).padStart(2, "0")}:00`).join(" & ");
 
   return (
     <div>
@@ -31,6 +43,47 @@ export default async function AdminSocial() {
         Pick a photo from Drive. AI writes a brand-voice caption. Review, schedule, then publish via
         Make.com.
       </p>
+
+      {/* ── Autopilot ──────────────────────────────────────────────────────── */}
+      <section className="mt-8 rounded-sm border border-ink/10 bg-surface-2/40 p-5">
+        <div className="flex items-start justify-between gap-6">
+          <div>
+            <h2 className="font-display text-heading text-ink">Autopilot</h2>
+            <p className="mt-1 max-w-lg font-body text-body text-ink/60">
+              Keeps {QUEUE_TARGET} captioned posts queued at all times, auto-publishing at{" "}
+              <strong>{slotLabel} GMT</strong> daily. When one posts, the next is generated and
+              scheduled automatically — no manual work.
+            </p>
+            <p className="mt-2 font-mono text-caption text-ink/50">
+              {autopilot ? (
+                <>
+                  <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] tracking-widest text-green-800 uppercase">
+                    ● On
+                  </span>{" "}
+                  {scheduledCount} of {QUEUE_TARGET} scheduled
+                  {scheduledCount < QUEUE_TARGET ? " (queue filling — refills hourly)" : ""}
+                </>
+              ) : (
+                <span className="rounded-full bg-ink/10 px-2 py-0.5 text-[10px] tracking-widest text-ink/60 uppercase">
+                  ○ Off
+                </span>
+              )}
+            </p>
+          </div>
+          <form action={toggleAutopilot} className="shrink-0">
+            <input type="hidden" name="on" value={autopilot ? "0" : "1"} />
+            <button
+              className={`rounded-sm px-5 py-2 font-mono text-caption tracking-widest uppercase ${
+                autopilot
+                  ? "border border-ink/30 text-ink hover:border-ink/60"
+                  : "bg-accent-sun text-surface"
+              }`}
+            >
+              {autopilot ? "Turn off" : "Turn on"}
+            </button>
+          </form>
+        </div>
+      </section>
 
       <h2 className="mt-10 font-mono text-caption tracking-wide text-ink/60 uppercase">
         Photos in Drive ({images.length})
@@ -69,7 +122,9 @@ export default async function AdminSocial() {
         </ul>
       )}
 
-      <h2 className="mt-12 font-mono text-caption tracking-wide text-ink/60 uppercase">Drafts</h2>
+      <h2 className="mt-12 font-mono text-caption tracking-wide text-ink/60 uppercase">
+        Queue &amp; drafts ({drafts.length})
+      </h2>
       <ul className="mt-4 space-y-3">
         {drafts.map((d) => (
           <li key={d.id} className="flex gap-5 rounded-sm border border-ink/10 p-4">

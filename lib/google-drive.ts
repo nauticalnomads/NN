@@ -91,3 +91,23 @@ export async function listEmailCoverImages(): Promise<DriveFile[]> {
 export function driveImageUrl(id: string) {
   return `https://drive.google.com/uc?export=view&id=${id}`;
 }
+
+// A small, publicly-fetchable image URL suitable for sending to the vision model.
+// Drive originals are often multi-MB (over the model's per-image limit), so we use
+// the Drive thumbnail bumped up to ~1600px (lh3 URLs are public + a few hundred KB).
+// Returns null if Drive isn't configured or the file has no thumbnail yet.
+export async function driveCaptionUrl(fileId: string): Promise<string | null> {
+  const { serviceAccountJson } = await getGoogleConfig();
+  if (!serviceAccountJson) return null;
+  const t = await token(serviceAccountJson);
+  if (!t) return null;
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=thumbnailLink`,
+    { headers: { Authorization: `Bearer ${t}` } },
+  );
+  if (!res.ok) return null;
+  const j = await res.json();
+  const link: string | undefined = j.thumbnailLink;
+  if (!link) return null;
+  return link.replace(/=s\d+$/, "=s1600");
+}
