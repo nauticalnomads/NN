@@ -17,6 +17,24 @@ const DEFAULT_PLATFORMS = ["instagram", "facebook"];
 // within runtime limits; the hourly cron converges the queue over a few runs.
 const TOPUP_BATCH = 8;
 
+// Run `fn` over `items` with at most `limit` in flight, preserving result order.
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 // The next `count` posting slots (10:00 / 17:00 UTC) strictly after `after`.
 export function nextSlots(count: number, after: Date): Date[] {
   const slots: Date[] = [];
@@ -177,13 +195,15 @@ export async function topUpSocialDrafts(): Promise<number> {
 // Rebuild the scheduled queue from scratch in the saved drag-order. Clears
 // not-yet-published rows (draft + scheduled), then schedules the first
 // QUEUE_TARGET images (in order) at the next 10:00/17:00 GMT slots, captioning
-// each. Heavy (one caption call per post) — run inside after() from the action.
-export async function rebuildQueueFromOrder(): Promise<number> {
+// each. Captions are generated concurrently (bounded) so this is fast enough to
+// await directly from the Save action. Pass `orderOverride` to use the order the
+// admin just submitted even if persisting it to the DB hasn't taken effect.
+export async function rebuildQueueFromOrder(orderOverride?: string[]): Promise<number> {
   const sb = createServiceClient();
   const images = await listImages();
   if (images.length === 0) return 0;
 
-  const order = await getImageOrder();
+  const order = orderOverride && orderOverride.length ? orderOverride : await getImageOrder();
   const picks = applyImageOrder(images, order).slice(0, QUEUE_TARGET);
 
   // Wipe the pending queue (keep posted/failed history).
@@ -192,14 +212,17 @@ export async function rebuildQueueFromOrder(): Promise<number> {
   const slots = nextSlots(picks.length, new Date());
   const voice = await brandVoice();
 
+  // Caption all picks concurrently (bounded) — 20 sequential calls would be too
+  // slow for a single request; this keeps the Save action responsive.
+  const captions = await mapLimit(picks, 6, (img) => captionFor(img.id, voice));
+
   let made = 0;
   for (let i = 0; i < picks.length; i++) {
     const img = picks[i];
-    const caption = await captionFor(img.id, voice);
     const { error } = await sb.from("social_drafts").insert({
       image_ref: img.id,
       image_url: driveImageUrl(img.id),
-      caption,
+      caption: captions[i],
       status: "scheduled",
       scheduled_at: slots[i].toISOString(),
       platform_targets: DEFAULT_PLATFORMS,

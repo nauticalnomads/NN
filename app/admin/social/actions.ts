@@ -25,8 +25,12 @@ export async function saveSocialOrder(formData: FormData) {
     order = [];
   }
   if (!Array.isArray(order)) order = [];
-  await setImageOrder(order.map(String));
-  after(() => rebuildQueueFromOrder());
+  const ids = order.map(String);
+  // Persist the order (best-effort) and rebuild the queue synchronously using the
+  // just-submitted order — running this in after() proved unreliable on Workers,
+  // so the schedule never updated. Awaiting it here makes Save deterministic.
+  await setImageOrder(ids);
+  await rebuildQueueFromOrder(ids);
   revalidatePath("/admin/social");
 }
 
