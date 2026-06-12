@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { Container } from "@/components/Container";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { createClient } from "@/lib/supabase/server";
+import { ProductGrid } from "@/components/ProductGrid";
+import { getProductsByIds, getRelatedProducts } from "@/lib/queries";
 import { pageMetadata } from "@/lib/seo";
 import { articleLd, breadcrumbLd } from "@/lib/structured-data";
 import { renderMarkdown } from "@/lib/markdown";
@@ -19,6 +21,7 @@ type Post = {
   seo_description: string | null;
   cover_image_url: string | null;
   source_url: string | null;
+  product_id: string | null;
   published_at: string | null;
 };
 
@@ -28,7 +31,7 @@ async function getPost(slug: string): Promise<Post | null> {
     const { data } = await sb
       .from("blog_posts")
       .select(
-        "id, title, slug, body, seo_title, seo_description, cover_image_url, source_url, published_at",
+        "id, title, slug, body, seo_title, seo_description, cover_image_url, source_url, product_id, published_at",
       )
       .eq("slug", slug)
       .eq("status", "published")
@@ -59,6 +62,18 @@ export default async function Post({ params }: { params: Promise<{ slug: string 
   const { slug } = await params;
   const p = await getPost(slug);
   if (!p) notFound();
+
+  // "Shop this story" — the post's linked product (auto-queued posts carry
+  // product_id) padded out with related products. Empty when there's no link.
+  let shopProducts: Awaited<ReturnType<typeof getProductsByIds>> = [];
+  if (p.product_id) {
+    const [linked, related] = await Promise.all([
+      getProductsByIds([p.product_id]),
+      getRelatedProducts(p.product_id, 3),
+    ]);
+    shopProducts = [...linked, ...related].slice(0, 4);
+  }
+
   return (
     <Container className="py-16">
       <JsonLd data={articleLd(p)} />
@@ -99,6 +114,15 @@ export default async function Post({ params }: { params: Promise<{ slug: string 
           </a>
         )}
       </article>
+
+      {shopProducts.length > 0 && (
+        <section className="mt-16 border-t border-ink/10 pt-10">
+          <h2 className="mb-8 font-display text-heading tracking-tight text-ink">
+            Shop this story
+          </h2>
+          <ProductGrid products={shopProducts} />
+        </section>
+      )}
     </Container>
   );
 }

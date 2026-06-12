@@ -7,9 +7,10 @@
 // Resend) is set up exactly as for a normal request.
 //   - /api/cron/abandoned-cart — nudges still-pending carts.
 //   - /api/cron/social         — publishes social drafts whose scheduled_at passed.
+//   - /api/cron/blog           — publishes blog posts whose scheduled_at passed.
 import openNextHandler from "./.open-next/worker.js";
 
-const CRON_ROUTES = ["/api/cron/abandoned-cart", "/api/cron/social"];
+const CRON_ROUTES = ["/api/cron/abandoned-cart", "/api/cron/social", "/api/cron/blog"];
 
 export default {
   ...openNextHandler,

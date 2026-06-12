@@ -15,6 +15,7 @@ import {
   type Tile,
 } from "@/components/home/sections";
 import { FeaturedCarousel } from "@/components/home/FeaturedCarousel";
+import { InstagramGallery } from "@/components/home/InstagramGallery";
 
 export const revalidate = 300;
 
@@ -69,6 +70,7 @@ export default async function Home() {
       />
       <PhotoStrip images={strip} />
       <CategoryTiles tiles={tiles} />
+      <InstagramGallery />
     </>
   );
 }
