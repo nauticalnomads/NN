@@ -55,6 +55,7 @@ type Order = {
   id: string;
   order_number: string | null;
   email: string;
+  customer_id: string | null;
   status: string;
   currency: string;
   subtotal: number;
@@ -68,6 +69,62 @@ type Order = {
   placed_at: string | null;
   created_at: string;
 };
+
+type RefundRow = {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  created_at: string;
+};
+
+// One chronological view of the order's life: checkout opened → paid →
+// fulfilment attempts → tracking → refunds. Composed from data that already
+// exists (orders timestamps, fulfilment_attempts, the tracking JSON, refunds) —
+// no new event table.
+function buildTimeline(
+  order: Order,
+  attempts: Attempt[],
+  tracking: TrackingEntry[],
+  refunds: RefundRow[],
+): { at: string; label: string; detail?: string; warn?: boolean }[] {
+  const events: { at: string; label: string; detail?: string; warn?: boolean }[] = [
+    { at: order.created_at, label: "Checkout opened" },
+  ];
+  if (order.placed_at) {
+    events.push({
+      at: order.placed_at,
+      label: "Paid",
+      detail: order.stripe_payment_intent_id ?? undefined,
+    });
+  }
+  for (const a of attempts) {
+    events.push({
+      at: a.attempted_at,
+      label: `Fulfilment ${a.status}${a.provider ? ` · ${a.provider}` : ""}`,
+      detail: a.error_detail ?? a.provider_order_id ?? undefined,
+      warn: a.status === "failed",
+    });
+  }
+  for (const t of tracking) {
+    if (t.added_at) {
+      events.push({
+        at: t.added_at,
+        label: `Tracking added${t.provider ? ` · ${t.provider}` : ""}`,
+        detail: t.tracking_number,
+      });
+    }
+  }
+  for (const r of refunds) {
+    events.push({
+      at: r.created_at,
+      label: `Refund ${r.status}`,
+      detail: formatPrice(r.amount, r.currency),
+      warn: r.status === "failed",
+    });
+  }
+  return events.sort((a, b) => a.at.localeCompare(b.at));
+}
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Pending",
@@ -88,7 +145,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const { id } = await params;
   const sb = createServiceClient();
 
-  const [orderRes, itemsRes, attemptsRes] = await Promise.all([
+  const [orderRes, itemsRes, attemptsRes, refundsRes] = await Promise.all([
     sb.from("orders").select("*").eq("id", id).maybeSingle(),
     sb.from("order_items").select("*").eq("order_id", id).order("created_at"),
     sb
@@ -96,6 +153,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       .select("*")
       .eq("order_id", id)
       .order("attempted_at", { ascending: false }),
+    sb.from("refunds").select("id, amount, currency, status, created_at").eq("order_id", id),
   ]);
 
   const order = orderRes.data as unknown as Order | null;
@@ -103,6 +161,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
   const items = (itemsRes.data as unknown as OrderItem[]) ?? [];
   const attempts = (attemptsRes.data as unknown as Attempt[]) ?? [];
+  const refunds = (refundsRes.data as unknown as RefundRow[]) ?? [];
   const addr = order.shipping_address;
   const tracking: TrackingEntry[] = Array.isArray(order.tracking) ? order.tracking : [];
   const providerOrders: ProviderOrder[] = Array.isArray(order.provider_orders)
@@ -163,9 +222,43 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       )}
 
       <div className="mt-8 space-y-8">
+        {/* Timeline */}
+        <Section title="Timeline">
+          <ol className="space-y-2 border-l border-ink/15 pl-4">
+            {buildTimeline(order, attempts, tracking, refunds).map((e, i) => (
+              <li key={i} className="relative">
+                <span
+                  className={`absolute top-1.5 -left-[1.4rem] h-2 w-2 rounded-full ${
+                    e.warn ? "bg-accent-sun" : "bg-accent-sea"
+                  }`}
+                />
+                <p className="font-body text-body text-ink">
+                  {e.label}
+                  {e.detail && (
+                    <span className="ml-2 font-mono text-caption text-ink/50">{e.detail}</span>
+                  )}
+                </p>
+                <p className="font-mono text-caption text-ink/40">
+                  {new Date(e.at).toLocaleString("en-GB")}
+                </p>
+              </li>
+            ))}
+          </ol>
+        </Section>
+
         {/* Customer + shipping */}
         <Section title="Customer">
           <Field label="Email" value={order.email} mono />
+          {order.customer_id && (
+            <p>
+              <Link
+                href={`/admin/customers/${order.customer_id}`}
+                className="font-mono text-caption tracking-widest text-terracotta-text uppercase no-underline underline-offset-4 hover:underline"
+              >
+                View customer →
+              </Link>
+            </p>
+          )}
           {order.stripe_payment_intent_id && (
             <Field label="Stripe PI" value={order.stripe_payment_intent_id} mono />
           )}

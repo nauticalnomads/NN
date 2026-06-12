@@ -21,6 +21,7 @@ const NAV: { href: string; label: string; allowed: UserRole[] }[] = [
   { href: "/admin/products", label: "Products", allowed: ["master", "regular", "content"] },
   { href: "/admin/collections", label: "Collections", allowed: ["master", "regular", "content"] },
   { href: "/admin/orders", label: "Orders", allowed: ["master", "regular"] },
+  { href: "/admin/customers", label: "Customers", allowed: ["master", "regular"] },
   { href: "/admin/refunds", label: "Refunds", allowed: ["master", "regular"] },
   { href: "/admin/gift-cards", label: "Gift cards", allowed: ["master", "regular"] },
   { href: "/admin/store-credit", label: "Store credit", allowed: ["master", "regular"] },
