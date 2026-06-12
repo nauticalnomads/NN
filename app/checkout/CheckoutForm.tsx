@@ -5,6 +5,7 @@ import { useCart, type CartItem } from "@/components/cart/CartProvider";
 import { formatPrice } from "@/lib/format";
 import { createCheckoutSession, previewPromoAction, getStoreCreditPreview } from "./actions";
 import { previewGiftCardAction } from "@/app/gift-cards/actions";
+import { TrustBadges } from "@/components/TrustBadges";
 
 type GiftInfo = { valid: boolean; balance?: number; currency?: string; message: string };
 type PromoInfo = { valid: boolean; percent?: number; message: string };
@@ -270,6 +271,9 @@ export function CheckoutForm() {
         <p className="mt-3 font-mono text-caption text-ink/40">
           Payment handled by Stripe. We never see your card.
         </p>
+        <div className="mt-5 border-t border-ink/10 pt-5">
+          <TrustBadges />
+        </div>
       </aside>
     </form>
   );
