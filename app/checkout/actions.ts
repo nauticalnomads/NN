@@ -10,6 +10,7 @@ import { markOrderPaid } from "@/lib/orders";
 import { getRedeemableCard, createPendingRedemption } from "@/lib/gift-cards";
 import { getAvailableCredit, reserveCredit } from "@/lib/store-credit";
 import { getPromoPercent } from "@/lib/promo";
+import { qualifiesForFreeShipping } from "@/lib/shipping-config";
 
 type Payload = {
   email: string;
@@ -99,6 +100,16 @@ export async function createCheckoutSession(
   }));
 
   const shipping = await quoteShipping(cartLines, shipping_address);
+
+  // Free-shipping threshold: waive the quoted rate once the (pre-discount) items
+  // subtotal clears the configured threshold. Off entirely when the env var is
+  // unset, so this is a no-op until the store opts in. Mutating the quote keeps
+  // the waiver in the order's shipping_quote snapshot and the Stripe shipping
+  // option in sync.
+  if (qualifiesForFreeShipping(subtotal)) {
+    shipping.rate = 0;
+    shipping.zone = "Free";
+  }
 
   // Promo code (optional): percent off the items subtotal, validated
   // server-side against lib/promo.ts (never trusted from the client).

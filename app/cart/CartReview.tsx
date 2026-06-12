@@ -4,9 +4,16 @@ import Link from "next/link";
 import Image from "next/image";
 import { useCart } from "@/components/cart/CartProvider";
 import { formatPrice } from "@/lib/format";
+import { TrustBadges } from "@/components/TrustBadges";
+import {
+  FREE_SHIPPING_THRESHOLD,
+  freeShippingEnabled,
+  amountToFreeShipping,
+} from "@/lib/shipping-config";
 
 export function CartReview() {
   const { items, setQuantity, remove, subtotal } = useCart();
+  const currency = items[0]?.currency ?? "GBP";
 
   if (items.length === 0) {
     return (
@@ -103,6 +110,9 @@ export function CartReview() {
         <p className="mt-1 font-mono text-caption text-ink/50">
           Shipping calculated at checkout. No VAT charged.
         </p>
+
+        {freeShippingEnabled() && <FreeShippingMeter subtotal={subtotal} currency={currency} />}
+
         <Link
           href="/checkout"
           className="mt-6 block rounded-sm bg-accent-sun py-3 text-center font-mono text-xs tracking-widest text-surface uppercase no-underline transition-opacity hover:opacity-90"
@@ -115,7 +125,39 @@ export function CartReview() {
         >
           Keep shopping
         </Link>
+
+        <div className="mt-6 border-t border-ink/10 pt-5">
+          <TrustBadges />
+        </div>
       </aside>
+    </div>
+  );
+}
+
+// Progress toward the free-shipping threshold: a "spend £X more" nudge with a
+// fill bar, or a confirmation once unlocked. Only rendered when the feature is on.
+function FreeShippingMeter({ subtotal, currency }: { subtotal: number; currency: string }) {
+  const remaining = amountToFreeShipping(subtotal);
+  const unlocked = remaining <= 0;
+  const pct = Math.min(100, Math.round((subtotal / FREE_SHIPPING_THRESHOLD) * 100));
+  return (
+    <div className="mt-4 rounded-sm bg-surface p-3">
+      <p className="font-mono text-caption text-ink/70">
+        {unlocked ? (
+          <span className="text-accent-sea">✓ You&rsquo;ve unlocked free shipping.</span>
+        ) : (
+          <>
+            Spend <span className="text-ink">{formatPrice(remaining, currency)}</span> more for free
+            shipping.
+          </>
+        )}
+      </p>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink/10">
+        <div
+          className="h-full rounded-full bg-accent-sea transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
     </div>
   );
 }
