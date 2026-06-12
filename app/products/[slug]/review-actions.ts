@@ -1,14 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createReview } from "@/lib/reviews";
-import { getCustomer } from "@/lib/customer";
+import { createReview, canReviewProduct } from "@/lib/reviews";
 
-// Auth state for the review form, fetched client-side so the PDP itself stays
+// Review eligibility for a product, fetched client-side so the PDP itself stays
 // statically rendered (calling cookies() in the page would force it dynamic).
-export async function reviewAuthState(): Promise<{ signedIn: boolean; defaultName: string }> {
-  const customer = await getCustomer();
-  return { signedIn: !!customer, defaultName: customer?.full_name ?? "" };
+// Verified buyers only — `canReview` is true only for signed-in customers with a
+// paid order containing this product who haven't already reviewed it.
+export async function reviewAuthState(
+  productId: string,
+): Promise<{ signedIn: boolean; canReview: boolean; defaultName: string }> {
+  return canReviewProduct(productId);
 }
 
 // Submit a product review (signed-in customers only; enforced in createReview).

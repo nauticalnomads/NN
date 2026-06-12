@@ -48,16 +48,21 @@ export function ProductReviews({
   summary: ReviewSummary;
 }) {
   const [showForm, setShowForm] = useState(false);
-  // Auth state is fetched client-side so the PDP stays statically rendered.
-  const [auth, setAuth] = useState<{ signedIn: boolean; defaultName: string } | null>(null);
+  // Eligibility is fetched client-side so the PDP stays statically rendered.
+  const [auth, setAuth] = useState<{
+    signedIn: boolean;
+    canReview: boolean;
+    defaultName: string;
+  } | null>(null);
 
   useEffect(() => {
-    reviewAuthState()
+    reviewAuthState(productId)
       .then(setAuth)
-      .catch(() => setAuth({ signedIn: false, defaultName: "" }));
-  }, []);
+      .catch(() => setAuth({ signedIn: false, canReview: false, defaultName: "" }));
+  }, [productId]);
 
   const signedIn = auth?.signedIn ?? false;
+  const canReview = auth?.canReview ?? false;
   const defaultName = auth?.defaultName ?? "";
 
   return (
@@ -80,7 +85,7 @@ export function ProductReviews({
           )}
         </div>
 
-        {auth === null ? null : signedIn ? (
+        {auth === null ? null : canReview ? (
           <button
             type="button"
             onClick={() => setShowForm((s) => !s)}
@@ -88,6 +93,10 @@ export function ProductReviews({
           >
             {showForm ? "Close" : "Write a review"}
           </button>
+        ) : signedIn ? (
+          <p className="max-w-[16rem] text-right font-mono text-caption text-ink/45">
+            Only verified buyers can review this product.
+          </p>
         ) : (
           <Link
             href={`/login?next=/products/${slug}`}
@@ -98,7 +107,7 @@ export function ProductReviews({
         )}
       </div>
 
-      {signedIn && showForm && (
+      {canReview && showForm && (
         <ReviewForm
           productId={productId}
           slug={slug}

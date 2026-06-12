@@ -46,8 +46,52 @@ export function summarizeReviews(reviews: Review[]): ReviewSummary {
   return { count: reviews.length, average: Math.round((sum / reviews.length) * 10) / 10 };
 }
 
-// Submit a review for the signed-in customer. Lands as `pending` for moderation.
-// Stamps verified_purchase when the customer has a paid order with this product.
+// Has this customer a paid order containing the product? Drives both the
+// "verified buyer" gate on submission and the badge.
+async function hasPurchased(customerId: string, productId: string): Promise<boolean> {
+  try {
+    const svc = createServiceClient();
+    const { data } = await svc
+      .from("order_items")
+      .select("id, orders!inner(customer_id, status)")
+      .eq("product_id", productId)
+      .eq("orders.customer_id", customerId)
+      .in("orders.status", PAID_STATUSES)
+      .limit(1);
+    return !!(data as unknown as unknown[])?.length;
+  } catch {
+    return false;
+  }
+}
+
+// Can the signed-in customer review this product right now? (Signed in + has a
+// paid order with it + hasn't already reviewed it.) Used by the PDP to decide
+// whether to show the write-a-review form.
+export async function canReviewProduct(
+  productId: string,
+): Promise<{ signedIn: boolean; canReview: boolean; defaultName: string }> {
+  const customer = await getCustomer();
+  if (!customer) return { signedIn: false, canReview: false, defaultName: "" };
+  const defaultName = customer.full_name ?? "";
+  try {
+    const svc = createServiceClient();
+    const { data: existing } = await svc
+      .from("product_reviews")
+      .select("id")
+      .eq("product_id", productId)
+      .eq("customer_id", customer.id)
+      .maybeSingle();
+    if (existing) return { signedIn: true, canReview: false, defaultName };
+  } catch {
+    /* fall through — treat as not-yet-reviewed */
+  }
+  const purchased = await hasPurchased(customer.id, productId);
+  return { signedIn: true, canReview: purchased, defaultName };
+}
+
+// Submit a review for the signed-in customer. Verified buyers only: the customer
+// must have a paid order containing the product. Lands as `pending` for
+// moderation.
 export async function createReview(input: {
   productId: string;
   rating: number;
@@ -79,19 +123,10 @@ export async function createReview(input: {
       .maybeSingle();
     if (existing) return { ok: false, message: "You've already reviewed this product." };
 
-    // Verified purchase: any paid order by this customer containing the product.
-    let verified = false;
-    try {
-      const { data: bought } = await svc
-        .from("order_items")
-        .select("id, orders!inner(customer_id, status)")
-        .eq("product_id", input.productId)
-        .eq("orders.customer_id", customer.id)
-        .in("orders.status", PAID_STATUSES)
-        .limit(1);
-      verified = !!(bought as unknown as unknown[])?.length;
-    } catch {
-      verified = false;
+    // Verified buyers only.
+    const verified = await hasPurchased(customer.id, input.productId);
+    if (!verified) {
+      return { ok: false, message: "Only verified buyers can review this product." };
     }
 
     const { error } = await svc.from("product_reviews").insert({
@@ -102,7 +137,7 @@ export async function createReview(input: {
       title: (input.title ?? "").trim() || null,
       body,
       status: "pending",
-      verified_purchase: verified,
+      verified_purchase: true,
     } as never);
     if (error) return { ok: false, message: "Couldn't save your review. Please try again." };
     return { ok: true, message: "Thanks! Your review will appear once it's approved." };
