@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireOps } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { grantCredit } from "@/lib/store-credit";
+import { writeAudit } from "@/lib/audit";
 
 // Manually grant store credit to a customer by email (goodwill, support, etc.).
 // Master + regular only — content admin is blocked by requireOps.
@@ -11,7 +12,7 @@ export async function grantStoreCredit(
   _prev: { ok: boolean; message: string } | null,
   formData: FormData,
 ): Promise<{ ok: boolean; message: string }> {
-  await requireOps();
+  const admin = await requireOps();
   const email = String(formData.get("email") || "")
     .trim()
     .toLowerCase();
@@ -36,6 +37,14 @@ export async function grantStoreCredit(
     notifyEmail: customer.email,
   });
   if (!granted) return { ok: false, message: "Couldn't grant credit. Try again." };
+
+  await writeAudit(admin, "store_credit.granted", {
+    customer_id: customer.id,
+    customer_email: customer.email,
+    amount,
+    currency: "GBP",
+    note: note || null,
+  });
 
   revalidatePath("/admin/store-credit");
   return { ok: true, message: `Granted £${amount.toFixed(2)} to ${email}.` };

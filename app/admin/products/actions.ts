@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
+import { writeAudit } from "@/lib/audit";
 import { autoQueueForProduct } from "@/lib/blog";
 import { generateSeo } from "@/lib/seo";
 import { uploadImage } from "@/lib/storage";
@@ -116,7 +117,7 @@ export async function generateProductSeo(formData: FormData): Promise<void> {
 // a blog draft (§B-13). De-dup lives in autoQueueForProduct. Content admin may
 // manage products (permission matrix §3) so requireStaff is correct here.
 export async function setProductStatus(formData: FormData): Promise<void> {
-  await requireStaff();
+  const actor = await requireStaff();
   const productId = String(formData.get("product_id") || "");
   const next = String(formData.get("status") || "");
   if (!productId || (next !== "published" && next !== "draft")) return;
@@ -133,6 +134,9 @@ export async function setProductStatus(formData: FormData): Promise<void> {
     .from("products")
     .update({ status: next } as never)
     .eq("id", productId);
+  if (wasStatus !== next) {
+    await writeAudit(actor, "product.status", { product_id: productId, from: wasStatus, to: next });
+  }
 
   // Trigger the blog auto-queue only on a real draft → published transition.
   if (next === "published" && wasStatus !== "published") {
@@ -140,6 +144,41 @@ export async function setProductStatus(formData: FormData): Promise<void> {
   }
 
   revalidatePath("/admin/products");
+}
+
+// Bulk publish/unpublish from the products list (checkbox selection). Fires the
+// blog auto-queue per newly-published product, same as the single-row action.
+export async function bulkSetProductStatus(formData: FormData): Promise<void> {
+  const actor = await requireStaff();
+  const ids = formData.getAll("ids").map(String).filter(Boolean);
+  const next = String(formData.get("status") || "");
+  if (!ids.length || (next !== "published" && next !== "draft")) {
+    redirect("/admin/products?notice=none");
+  }
+
+  const sb = createServiceClient();
+  const { data: before } = await sb.from("products").select("id, status").in("id", ids);
+  const wasPublished = new Set(
+    (((before as unknown as { id: string; status: string }[]) ?? []) || [])
+      .filter((p) => p.status === "published")
+      .map((p) => p.id),
+  );
+
+  const { error } = await sb
+    .from("products")
+    .update({ status: next } as never)
+    .in("id", ids);
+  if (error) redirect("/admin/products?notice=error");
+
+  await writeAudit(actor, "product.bulk_status", { product_ids: ids, to: next });
+  if (next === "published") {
+    for (const id of ids) {
+      if (!wasPublished.has(id)) autoQueueForProduct(id, "auto_new_product").catch(() => undefined);
+    }
+  }
+
+  revalidatePath("/admin/products");
+  redirect(`/admin/products?notice=${next}:${ids.length}`);
 }
 
 // Set a product's category from the products list dropdown. Updates
@@ -206,7 +245,7 @@ export async function setProductCategory(formData: FormData): Promise<void> {
 // blog auto-queue on a draft→published transition and on a newly-on-sale
 // transition (price drops below compare_at_price). De-dup lives in lib/blog.
 export async function updateProduct(formData: FormData): Promise<void> {
-  await requireStaff();
+  const actor = await requireStaff();
   const productId = String(formData.get("product_id") || "");
   if (!productId) return;
 
@@ -251,6 +290,23 @@ export async function updateProduct(formData: FormData): Promise<void> {
       description,
     } as never)
     .eq("id", productId);
+
+  // Audit the sensitive edits: price and status changes (who, from → to).
+  if (safePrice !== old.price) {
+    await writeAudit(actor, "product.price", {
+      product_id: productId,
+      from: old.price,
+      to: safePrice,
+    });
+  }
+  const nextStatus = status === "published" ? "published" : "draft";
+  if (nextStatus !== old.status) {
+    await writeAudit(actor, "product.status", {
+      product_id: productId,
+      from: old.status,
+      to: nextStatus,
+    });
+  }
 
   const wasOnSale = old.compare_at_price != null && old.price < old.compare_at_price;
   const nowOnSale = safeCompare != null && safePrice < safeCompare;

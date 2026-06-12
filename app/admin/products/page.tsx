@@ -3,8 +3,23 @@ import Image from "next/image";
 import { requireStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { formatPrice } from "@/lib/format";
-import { setProductStatus } from "./actions";
+import { setProductStatus, bulkSetProductStatus } from "./actions";
 import { CategorySelect, CategoryFilter } from "./CategoryControls";
+
+// Banner text for the post-bulk-action redirect (?notice=…), following the
+// settings/blog searchParams pattern.
+function noticeText(notice: string): { text: string; warn: boolean } | null {
+  if (notice === "none") return { text: "Select at least one product first.", warn: true };
+  if (notice === "error") return { text: "Bulk update failed — try again.", warn: true };
+  const [status, n] = notice.split(":");
+  if ((status === "published" || status === "draft") && n) {
+    return {
+      text: `${n} product${n === "1" ? "" : "s"} ${status === "published" ? "published" : "unpublished"}.`,
+      warn: false,
+    };
+  }
+  return null;
+}
 
 type Img = { url: string; is_primary: boolean; sort_order: number };
 type Row = {
@@ -31,10 +46,11 @@ function thumb(images: Img[]): string | null {
 export default async function AdminProducts({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string }>;
+  searchParams: Promise<{ category?: string; notice?: string }>;
 }) {
   await requireStaff();
-  const { category = "" } = await searchParams;
+  const { category = "", notice = "" } = await searchParams;
+  const banner = notice ? noticeText(notice) : null;
   const sb = await createClient();
 
   // Category options (breadcrumb labels) from the full taxonomy.
@@ -89,6 +105,43 @@ export default async function AdminProducts({
         <CategoryFilter current={category} options={catOptions} />
       </div>
 
+      {banner && (
+        <div
+          className={`mt-4 rounded-sm border px-4 py-3 font-body text-caption text-ink ${
+            banner.warn
+              ? "border-accent-sun/40 bg-accent-sun/5"
+              : "border-accent-sea/30 bg-accent-sea/5"
+          }`}
+        >
+          {banner.text}
+        </div>
+      )}
+
+      {/* Bulk actions: row checkboxes are associated to this form via the HTML
+          form attribute (form="bulk-status"), so they work without nesting
+          forms inside the per-row status/category forms. */}
+      <form id="bulk-status" action={bulkSetProductStatus} className="mt-6 flex items-center gap-2">
+        <span className="font-mono text-caption tracking-wide text-ink/50 uppercase">
+          With selected:
+        </span>
+        <button
+          type="submit"
+          name="status"
+          value="published"
+          className="rounded-sm border border-ink/20 px-3 py-1.5 font-mono text-xs tracking-widest text-ink/70 uppercase hover:border-accent-sea hover:text-accent-sea"
+        >
+          Publish
+        </button>
+        <button
+          type="submit"
+          name="status"
+          value="draft"
+          className="rounded-sm border border-ink/20 px-3 py-1.5 font-mono text-xs tracking-widest text-ink/70 uppercase hover:border-accent-sun hover:text-accent-sun"
+        >
+          Unpublish
+        </button>
+      </form>
+
       {drafts.length > 0 && (
         <section className="mt-8">
           <h2 className="mb-2 font-mono text-caption tracking-wide text-accent-sun uppercase">
@@ -128,6 +181,7 @@ function ProductTable({
       <table className="w-full text-left">
         <thead className="bg-surface-2">
           <tr className="font-mono text-caption tracking-wide text-ink/60 uppercase">
+            <th className="w-10 px-4 py-3" aria-label="Select" />
             <th className="px-4 py-3">Product</th>
             <th className="px-4 py-3">Category</th>
             <th className="px-4 py-3">Status</th>
@@ -140,6 +194,16 @@ function ProductTable({
             const src = thumb(p.product_images);
             return (
               <tr key={p.id} className="border-t border-ink/10 font-body text-body text-ink">
+                <td className="px-4 py-3">
+                  <input
+                    type="checkbox"
+                    name="ids"
+                    value={p.id}
+                    form="bulk-status"
+                    aria-label={`Select ${p.title}`}
+                    className="accent-accent-sun"
+                  />
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-sm bg-driftwood">
@@ -183,7 +247,7 @@ function ProductTable({
           })}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={5} className="px-4 py-8 text-center font-body text-ink/50">
+              <td colSpan={6} className="px-4 py-8 text-center font-body text-ink/50">
                 {emptyNote ?? "None."}
               </td>
             </tr>
