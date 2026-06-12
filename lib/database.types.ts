@@ -287,6 +287,20 @@ export interface EmailTemplateRow {
   updated_at: string;
 }
 
+export interface ProductReviewRow {
+  id: string;
+  product_id: string;
+  customer_id: string | null;
+  author_name: string;
+  rating: number;
+  title: string | null;
+  body: string;
+  status: string;
+  verified_purchase: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -311,6 +325,7 @@ export interface Database {
       email_suppressions: Table<EmailSuppressionRow, "email">;
       audit_log: Table<AuditLogRow, "action">;
       email_templates: Table<EmailTemplateRow, "key">;
+      product_reviews: Table<ProductReviewRow, "product_id" | "author_name" | "rating" | "body">;
     };
     Views: Record<never, never>;
     Functions: {
