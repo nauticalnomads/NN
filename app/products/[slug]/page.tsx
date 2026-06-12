@@ -6,8 +6,10 @@ import { Container } from "@/components/Container";
 import { VariantSelector } from "@/components/storefront/VariantSelector";
 import { ProductGrid } from "@/components/ProductGrid";
 import { JsonLd } from "@/components/seo/JsonLd";
+import { ProductReviews } from "@/components/storefront/ProductReviews";
 import { getProductBySlug, getProductSlugs, getRelatedProducts, primaryImage } from "@/lib/queries";
 import { productLd, breadcrumbLd } from "@/lib/structured-data";
+import { getProductReviews, summarizeReviews } from "@/lib/reviews";
 import { absoluteUrl } from "@/lib/site";
 
 export const revalidate = 300;
@@ -45,7 +47,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const product = await getProductBySlug(slug);
   if (!product) notFound();
 
-  const related = await getRelatedProducts(product.id);
+  const [related, reviews] = await Promise.all([
+    getRelatedProducts(product.id),
+    getProductReviews(product.id),
+  ]);
+  const reviewSummary = summarizeReviews(reviews);
 
   const images = [...(product.product_images ?? [])].sort(
     (a, b) => Number(b.is_primary) - Number(a.is_primary) || a.sort_order - b.sort_order,
@@ -54,7 +60,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   return (
     <Container className="py-12">
-      <JsonLd data={productLd(product)} />
+      <JsonLd data={productLd(product, { summary: reviewSummary, items: reviews })} />
       <JsonLd
         data={breadcrumbLd([
           { name: "Shop", path: "/shop" },
@@ -122,6 +128,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           )}
         </div>
       </div>
+
+      <ProductReviews
+        productId={product.id}
+        slug={product.slug}
+        reviews={reviews}
+        summary={reviewSummary}
+      />
 
       {related.length > 0 && (
         <section className="mt-24 border-t border-ink/10 pt-12">

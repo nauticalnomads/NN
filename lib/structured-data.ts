@@ -92,7 +92,13 @@ export function faqLd(items: { q: string; a: string }[]) {
   };
 }
 
-export function productLd(product: ProductWithRelations) {
+export function productLd(
+  product: ProductWithRelations,
+  reviewData?: {
+    summary: { count: number; average: number };
+    items: { rating: number; author_name: string; body: string; created_at: string }[];
+  },
+) {
   const img = primaryImage(product);
   const prices = [product.price, ...(product.variants ?? []).map((v) => v.price)].filter(
     (p) => typeof p === "number",
@@ -108,6 +114,22 @@ export function productLd(product: ProductWithRelations) {
     ...(img ? { image: [img.url] } : {}),
     sku: product.variants?.[0]?.sku,
     brand: { "@type": "Brand", name: site.name },
+    ...(reviewData && reviewData.summary.count > 0
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: reviewData.summary.average.toFixed(1),
+            reviewCount: reviewData.summary.count,
+          },
+          review: reviewData.items.slice(0, 5).map((r) => ({
+            "@type": "Review",
+            reviewRating: { "@type": "Rating", ratingValue: r.rating, bestRating: 5 },
+            author: { "@type": "Person", name: r.author_name },
+            reviewBody: r.body,
+            datePublished: r.created_at,
+          })),
+        }
+      : {}),
     offers:
       low === high
         ? {

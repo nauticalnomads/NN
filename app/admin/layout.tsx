@@ -26,6 +26,7 @@ const NAV: { href: string; label: string; allowed: UserRole[] }[] = [
   { href: "/admin/financial", label: "Financial", allowed: ["master", "regular"] },
   { href: "/admin/notifications", label: "Notifications", allowed: ["master", "regular"] },
   { href: "/admin/social", label: "Social", allowed: ["master", "regular", "content"] },
+  { href: "/admin/reviews", label: "Reviews", allowed: ["master", "regular", "content"] },
   { href: "/admin/blog", label: "Blog", allowed: ["master", "regular", "content"] },
   { href: "/admin/settings", label: "Settings", allowed: ["master", "regular"] },
   { href: "/admin/emails", label: "Emails", allowed: ["master", "regular"] },
