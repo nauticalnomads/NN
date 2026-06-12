@@ -104,7 +104,6 @@ export function productLd(
     (p) => typeof p === "number",
   );
   const low = Math.min(...(prices.length ? prices : [product.price]));
-  const high = Math.max(...(prices.length ? prices : [product.price]));
 
   return {
     "@context": "https://schema.org",
@@ -130,22 +129,27 @@ export function productLd(
           })),
         }
       : {}),
-    offers:
-      low === high
-        ? {
-            "@type": "Offer",
-            price: low.toFixed(2),
-            priceCurrency: product.currency,
-            availability: "https://schema.org/InStock",
-            url: absoluteUrl(`/products/${product.slug}`),
-          }
-        : {
-            "@type": "AggregateOffer",
-            lowPrice: low.toFixed(2),
-            highPrice: high.toFixed(2),
-            priceCurrency: product.currency,
-            availability: "https://schema.org/InStock",
-            offerCount: product.variants?.length || 1,
-          },
+    // Per-variant offers (SEO-3): one Offer per variant with its own sku/price.
+    // Everything is print-on-demand / made-to-order, so availability is always
+    // InStock — there's no inventory column to consult.
+    offers: product.variants?.length
+      ? product.variants.map((v) => ({
+          "@type": "Offer",
+          ...(v.sku ? { sku: v.sku } : {}),
+          ...(v.title || v.size || v.color
+            ? { name: v.title || [v.size, v.color].filter(Boolean).join(" / ") }
+            : {}),
+          price: (v.price ?? product.price).toFixed(2),
+          priceCurrency: product.currency,
+          availability: "https://schema.org/InStock",
+          url: absoluteUrl(`/products/${product.slug}`),
+        }))
+      : {
+          "@type": "Offer",
+          price: low.toFixed(2),
+          priceCurrency: product.currency,
+          availability: "https://schema.org/InStock",
+          url: absoluteUrl(`/products/${product.slug}`),
+        },
   };
 }

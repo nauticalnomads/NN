@@ -7,6 +7,7 @@ import { VariantSelector } from "@/components/storefront/VariantSelector";
 import { ProductGrid } from "@/components/ProductGrid";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { ProductReviews } from "@/components/storefront/ProductReviews";
+import { RecentlyViewed } from "@/components/storefront/RecentlyViewed";
 import { getProductBySlug, getProductSlugs, getRelatedProducts, primaryImage } from "@/lib/queries";
 import { productLd, breadcrumbLd } from "@/lib/structured-data";
 import { getProductReviews, summarizeReviews } from "@/lib/reviews";
@@ -144,6 +145,17 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <ProductGrid products={related} />
         </section>
       )}
+
+      <RecentlyViewed
+        current={{
+          id: product.id,
+          slug: product.slug,
+          title: product.title,
+          price: product.price,
+          currency: product.currency,
+          imageUrl: hero?.url ?? null,
+        }}
+      />
     </Container>
   );
 }

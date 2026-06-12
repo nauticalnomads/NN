@@ -111,6 +111,21 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
             { name: col.title, path: `/collections/${col.slug}` },
           ])}
         />
+        <nav className="mb-6 font-mono text-caption tracking-wide text-ink/50 uppercase">
+          <Link href="/shop" className="hover:text-accent-sun">
+            Shop
+          </Link>
+          {col.parent_slug && (
+            <>
+              <span className="mx-2">/</span>
+              <Link href={`/collections/${col.parent_slug}`} className="hover:text-accent-sun">
+                {col.parent_slug.replace(/-/g, " ")}
+              </Link>
+            </>
+          )}
+          <span className="mx-2">/</span>
+          <span className="text-ink/80">{col.title}</span>
+        </nav>
         {products.length === 0 ? (
           <div className="rounded-sm border border-dashed border-ink/20 py-20 text-center">
             <p className="font-body text-body text-ink/55">
