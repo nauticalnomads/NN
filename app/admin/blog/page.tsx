@@ -3,10 +3,18 @@ import Image from "next/image";
 import { SubmitButton } from "@/components/admin/SubmitButton";
 import { requireStaff } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
-import { draftFromUrlAction, publishDraft, discardDraft } from "./actions";
+import {
+  draftFromUrlAction,
+  publishDraft,
+  discardDraft,
+  scheduleDraft,
+  unscheduleDraft,
+} from "./actions";
 
 const STATUS_MSG: Record<string, { text: string; tone: "ok" | "warn" }> = {
   saved: { text: "Post saved.", tone: "ok" },
+  scheduled: { text: "Post scheduled — it publishes automatically at that time.", tone: "ok" },
+  bad_schedule: { text: "Pick a valid date and time to schedule.", tone: "warn" },
   ai: { text: "Draft written from the URL with AI. Review it below, then Publish.", tone: "ok" },
   scraped: {
     text: "Draft created from the page's text (AI key not set — set ANTHROPIC_API_KEY on the worker for finished copy). Edit it below.",
@@ -33,7 +41,9 @@ export default async function AdminBlog({
   const sb = createServiceClient();
   const { data } = await sb
     .from("blog_posts")
-    .select("id, title, slug, status, trigger, created_at, excerpt, cover_image_url, source_url")
+    .select(
+      "id, title, slug, status, trigger, created_at, scheduled_at, excerpt, cover_image_url, source_url",
+    )
     .order("created_at", { ascending: false })
     .limit(50);
   const rows =
@@ -44,12 +54,16 @@ export default async function AdminBlog({
       status: string;
       trigger: string | null;
       created_at: string;
+      scheduled_at: string | null;
       excerpt: string | null;
       cover_image_url: string | null;
       source_url: string | null;
     }>) || [];
   const drafts = rows.filter((r) => r.status === "draft");
-  const others = rows.filter((r) => r.status !== "draft");
+  const scheduled = rows
+    .filter((r) => r.status === "scheduled")
+    .sort((a, b) => (a.scheduled_at ?? "").localeCompare(b.scheduled_at ?? ""));
+  const others = rows.filter((r) => r.status !== "draft" && r.status !== "scheduled");
 
   return (
     <div>
@@ -115,7 +129,7 @@ export default async function AdminBlog({
                 </p>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-3">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-3">
               <Link
                 href={`/admin/blog/${d.id}`}
                 className="font-mono text-caption tracking-widest text-ink uppercase no-underline underline-offset-4 hover:underline"
@@ -126,6 +140,18 @@ export default async function AdminBlog({
                 <input type="hidden" name="id" value={d.id} />
                 <button className="font-mono text-caption tracking-widest text-accent-sea uppercase underline-offset-4 hover:underline">
                   Publish
+                </button>
+              </form>
+              <form action={scheduleDraft} className="flex items-center gap-2">
+                <input type="hidden" name="id" value={d.id} />
+                <input
+                  type="datetime-local"
+                  name="scheduled_at"
+                  required
+                  className="rounded-sm border border-ink/20 bg-surface px-2 py-1 font-mono text-caption"
+                />
+                <button className="font-mono text-caption tracking-widest text-ink/70 uppercase underline-offset-4 hover:underline">
+                  Schedule
                 </button>
               </form>
               <form action={discardDraft}>
@@ -141,6 +167,50 @@ export default async function AdminBlog({
           <p className="font-body text-body text-ink/50">No drafts in the queue.</p>
         )}
       </ul>
+
+      {scheduled.length > 0 && (
+        <>
+          <h2 className="mt-10 font-mono text-caption tracking-wide text-ink/60 uppercase">
+            Scheduled ({scheduled.length})
+          </h2>
+          <ul className="mt-4 space-y-2">
+            {scheduled.map((s) => (
+              <li
+                key={s.id}
+                className="flex items-center justify-between rounded-sm border border-ink/10 p-4"
+              >
+                <div className="min-w-0">
+                  <p className="font-body text-body text-ink">{s.title}</p>
+                  <p className="mt-0.5 font-mono text-caption text-accent-sea">
+                    Publishes{" "}
+                    {s.scheduled_at ? new Date(s.scheduled_at).toLocaleString("en-GB") : "—"}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <Link
+                    href={`/admin/blog/${s.id}`}
+                    className="font-mono text-caption tracking-widest text-ink uppercase no-underline underline-offset-4 hover:underline"
+                  >
+                    Edit
+                  </Link>
+                  <form action={publishDraft}>
+                    <input type="hidden" name="id" value={s.id} />
+                    <button className="font-mono text-caption tracking-widest text-accent-sea uppercase underline-offset-4 hover:underline">
+                      Publish now
+                    </button>
+                  </form>
+                  <form action={unscheduleDraft}>
+                    <input type="hidden" name="id" value={s.id} />
+                    <button className="font-mono text-caption tracking-widest text-ink/50 uppercase underline-offset-4 hover:underline">
+                      Unschedule
+                    </button>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
       <h2 className="mt-10 font-mono text-caption tracking-wide text-ink/60 uppercase">
         Recent posts

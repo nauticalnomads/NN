@@ -84,6 +84,39 @@ export async function saveBlogPost(formData: FormData) {
   redirect("/admin/blog?status=saved");
 }
 
+// Schedule a draft to auto-publish at a chosen time (mirrors the social
+// autopilot UX). The hourly cron (/api/cron/blog) publishes due posts.
+export async function scheduleDraft(formData: FormData) {
+  await requireStaff();
+  const id = String(formData.get("id") || "");
+  const when = String(formData.get("scheduled_at") || "");
+  const at = new Date(when);
+  if (!id || !when || Number.isNaN(at.getTime())) {
+    redirect("/admin/blog?status=bad_schedule");
+  }
+  const sb = createServiceClient();
+  await sb
+    .from("blog_posts")
+    .update({ status: "scheduled", scheduled_at: at.toISOString() } as never)
+    .eq("id", id);
+  revalidatePath("/admin/blog");
+  redirect("/admin/blog?status=scheduled");
+}
+
+// Pull a scheduled post back to draft.
+export async function unscheduleDraft(formData: FormData) {
+  await requireStaff();
+  const id = String(formData.get("id") || "");
+  if (!id) return;
+  const sb = createServiceClient();
+  await sb
+    .from("blog_posts")
+    .update({ status: "draft", scheduled_at: null } as never)
+    .eq("id", id)
+    .eq("status", "scheduled");
+  revalidatePath("/admin/blog");
+}
+
 export async function discardDraft(formData: FormData) {
   await requireStaff();
   const id = String(formData.get("id") || "");
