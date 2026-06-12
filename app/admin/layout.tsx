@@ -4,6 +4,7 @@ import { getAdminUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { UserRole } from "@/lib/database.types";
 import { redirect } from "next/navigation";
+import { CommandPalette } from "@/components/admin/CommandPalette";
 
 export const metadata: Metadata = {
   title: "Admin",
@@ -90,7 +91,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </form>
         </div>
       </aside>
-      <div className="px-6 py-10 lg:px-12">{children}</div>
+      <div className="px-6 py-10 lg:px-12">
+        <CommandPalette nav={items.map((i) => ({ href: i.href, label: i.label }))} />
+        {children}
+      </div>
     </div>
   );
 }
