@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireOps } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { formatPrice } from "@/lib/format";
+import { FILTERS } from "./filters";
 
 const STATUS_CLASS: Record<string, string> = {
   paid: "text-accent-sea",
@@ -12,14 +13,23 @@ const STATUS_CLASS: Record<string, string> = {
   refunded: "text-ink/40",
 };
 
-export default async function AdminOrders() {
+export default async function AdminOrders({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
   await requireOps(); // master + regular only; content admin blocked
+  const { status = "" } = await searchParams;
+  const filter = FILTERS.find((f) => f.key === status) ?? FILTERS[0];
+
   const sb = await createClient();
-  const { data } = await sb
+  let query = sb
     .from("orders")
     .select("id, order_number, email, status, grand_total, currency, created_at")
     .order("created_at", { ascending: false })
     .limit(100);
+  if (filter.statuses) query = query.in("status", filter.statuses);
+  const { data } = await query;
   const rows =
     (data as unknown as Array<{
       id: string;
@@ -37,11 +47,37 @@ export default async function AdminOrders() {
 
   return (
     <div>
-      <h1 className="font-display text-display-2 tracking-tight text-ink">Orders</h1>
+      <div className="flex items-baseline justify-between gap-3">
+        <h1 className="font-display text-display-2 tracking-tight text-ink">Orders</h1>
+        <a
+          href={`/admin/orders/export${filter.key ? `?status=${filter.key}` : ""}`}
+          className="rounded-sm border border-ink/20 px-4 py-2 font-mono text-xs tracking-widest text-ink/70 uppercase no-underline hover:border-ink/50"
+        >
+          Export CSV
+        </a>
+      </div>
       <p className="mt-3 font-body text-body text-ink/60">
-        {rows.length} most recent. Failed/attention-needed pinned to the top.
+        {rows.length} most recent{filter.key ? ` (${filter.label.toLowerCase()})` : ""}.
+        Failed/attention-needed pinned to the top.
       </p>
-      <div className="mt-8 overflow-hidden rounded-sm border border-ink/10">
+
+      <div className="mt-5 flex flex-wrap gap-2">
+        {FILTERS.map((f) => (
+          <Link
+            key={f.key}
+            href={f.key ? `/admin/orders?status=${f.key}` : "/admin/orders"}
+            className={`rounded-sm border px-3 py-1.5 font-mono text-caption no-underline transition-colors ${
+              f.key === filter.key
+                ? "border-ink bg-ink text-surface"
+                : "border-ink/20 text-ink/70 hover:border-ink/50"
+            }`}
+          >
+            {f.label}
+          </Link>
+        ))}
+      </div>
+
+      <div className="mt-6 overflow-hidden rounded-sm border border-ink/10">
         <table className="w-full text-left">
           <thead className="bg-surface-2">
             <tr className="font-mono text-caption tracking-wide text-ink/60 uppercase">
@@ -83,7 +119,7 @@ export default async function AdminOrders() {
             {rows.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center font-body text-ink/50">
-                  No orders yet.
+                  {filter.key ? `No ${filter.label.toLowerCase()} orders.` : "No orders yet."}
                 </td>
               </tr>
             )}

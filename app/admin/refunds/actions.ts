@@ -5,6 +5,7 @@ import { requireOps } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
 import { sendRefundUpdate } from "@/lib/email";
+import { writeAudit } from "@/lib/audit";
 
 // Issue the actual Stripe refund for a `refunds` row in 'requested' state.
 // Master + regular only — content admin is blocked by requireOps.
@@ -80,6 +81,13 @@ export async function issueRefund(formData: FormData) {
       .from("orders")
       .update({ status: "refunded" } as never)
       .eq("id", refund.order_id);
+    await writeAudit(admin, "refund.issued", {
+      refund_id: refund.id,
+      order_id: refund.order_id,
+      amount: refund.amount,
+      currency: refund.currency,
+      stripe_refund_id: r.id,
+    });
     await sendRefundUpdate(refund.order_id, "completed", refund.amount, refund.currency).catch(
       () => undefined,
     );
