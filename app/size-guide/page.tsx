@@ -1,4 +1,5 @@
 import { Prose } from "@/components/Prose";
+import { FitQuiz } from "@/components/storefront/FitQuiz";
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
@@ -44,6 +45,7 @@ export default function SizeGuide() {
       <p className="text-ink/60">
         Specific pieces note their own fit on the product page. When in doubt, email us.
       </p>
+      <FitQuiz />
     </Prose>
   );
 }
