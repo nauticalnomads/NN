@@ -173,6 +173,64 @@ export async function getProductsByIds(ids: string[]): Promise<ProductWithRelati
   }
 }
 
+// "You may also like" on the PDP. Prefers other products that share a collection
+// with the current one, then tops up with featured/other published products so
+// the rail is always full. Excludes the product itself and de-dupes.
+export async function getRelatedProducts(
+  productId: string,
+  limit = 4,
+): Promise<ProductWithRelations[]> {
+  if (!configured()) return [];
+  try {
+    const supabase = createPublicClient();
+    const picks = new Map<string, ProductWithRelations>();
+
+    // Same-collection siblings first.
+    const { data: memberships } = await supabase
+      .from("collection_products")
+      .select("collection_id")
+      .eq("product_id", productId);
+    const collectionIds = ((memberships ?? []) as unknown as { collection_id: string }[]).map(
+      (m) => m.collection_id,
+    );
+
+    if (collectionIds.length) {
+      const { data: siblings } = await supabase
+        .from("collection_products")
+        .select("products(*, variants(*), product_images(*))")
+        .in("collection_id", collectionIds)
+        .limit(limit * 4);
+      for (const row of (siblings ?? []) as unknown as {
+        products: ProductWithRelations | null;
+      }[]) {
+        const p = row.products;
+        if (p && p.id !== productId && p.status === "published" && !picks.has(p.id))
+          picks.set(p.id, p);
+      }
+    }
+
+    // Top up with other published products if we're short.
+    if (picks.size < limit) {
+      const { data: more } = await supabase
+        .from("products")
+        .select("*, variants(*), product_images(*)")
+        .eq("status", "published")
+        .neq("id", productId)
+        .order("featured", { ascending: false })
+        .order("sort_order")
+        .limit(limit * 3);
+      for (const p of (more ?? []) as unknown as ProductWithRelations[]) {
+        if (!picks.has(p.id)) picks.set(p.id, p);
+        if (picks.size >= limit) break;
+      }
+    }
+
+    return Array.from(picks.values()).slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
 // Published sub-collections of a parent slug (for PLP sub-nav tabs, §5.2).
 export async function getChildCollections(
   parentSlug: string,
