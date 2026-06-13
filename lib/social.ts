@@ -133,46 +133,60 @@ export function applyImageOrder<T extends { id: string; name: string }>(
 
 type QueueRow = { image_ref: string | null; scheduled_at: string | null; status: string };
 
-// Refill the scheduled queue to QUEUE_TARGET when autopilot is on. Picks Drive
-// images that aren't already queued (spreading reuse evenly when the library is
-// smaller than the queue), captions each, and schedules it at the next free slot
-// after the current tail. Bounded to TOPUP_BATCH per call; safe to run on every
-// cron tick. Returns how many drafts it generated.
+// Refill the scheduled queue to QUEUE_TARGET when autopilot is on, then caption
+// + schedule each pick at the next free slot after the current tail. Bounded to
+// TOPUP_BATCH per call; safe to run on every cron tick. Returns how many drafts
+// it generated.
+//
+// Selection priority (this is what makes new Drive uploads go out first):
+//   1. Photos never used before — newest-added first (Drive createdTime desc).
+//   2. Only once those run out, reuse already-posted photos, least-used first.
+// "Used" is judged against the WHOLE history (posted + queued), not just what's
+// currently waiting, so a photo doesn't look fresh again the moment it publishes.
 export async function topUpSocialDrafts(): Promise<number> {
   if (!(await getAutopilot())) return 0;
 
   const sb = createServiceClient();
-  const images = await listImages();
+  const images = await listImages(); // newest-first from Drive
   if (images.length === 0) return 0;
 
-  // Current queue: rows awaiting publish (manual drafts + scheduled posts).
-  const { data: queueData } = await sb
+  // Full history across every status: how many times each photo has been used,
+  // which photos are still waiting in the queue (never double-schedule those),
+  // and the tail of the schedule to append after.
+  const { data: allData } = await sb
     .from("social_drafts")
-    .select("image_ref, scheduled_at, status")
-    .in("status", ["draft", "scheduled"]);
-  const queue = (queueData as unknown as QueueRow[]) ?? [];
+    .select("image_ref, scheduled_at, status");
+  const rows = (allData as unknown as QueueRow[]) ?? [];
 
-  const scheduledCount = queue.filter((r) => r.status === "scheduled").length;
+  const usage = new Map<string, number>();
+  const pending = new Set<string>();
+  let tailMs = Date.now();
+  let scheduledCount = 0;
+  for (const r of rows) {
+    if (r.image_ref) usage.set(r.image_ref, (usage.get(r.image_ref) ?? 0) + 1);
+    if (r.status === "scheduled") scheduledCount += 1;
+    if (r.status === "draft" || r.status === "scheduled") {
+      if (r.image_ref) pending.add(r.image_ref);
+      if (r.scheduled_at) tailMs = Math.max(tailMs, new Date(r.scheduled_at).getTime());
+    }
+  }
+
   const need = Math.min(QUEUE_TARGET - scheduledCount, TOPUP_BATCH);
   if (need <= 0) return 0;
 
-  // Follow the saved drag-order. Prefer images with the fewest copies already in
-  // the queue (so we cycle through the library in order before repeating).
-  const order = await getImageOrder();
-  const useCount = new Map<string, number>();
-  for (const r of queue)
-    if (r.image_ref) useCount.set(r.image_ref, (useCount.get(r.image_ref) ?? 0) + 1);
-  const ordered = applyImageOrder(images, order).sort(
-    (a, b) => (useCount.get(a.id) ?? 0) - (useCount.get(b.id) ?? 0),
-  );
-  const picks = ordered.slice(0, need);
+  // Skip photos already waiting in the queue, then: newest unused first, then
+  // least-used for reuse. `images` arrives newest-first, so it's a stable
+  // tiebreak for both groups.
+  const candidates = images.filter((img) => !pending.has(img.id));
+  const unused = candidates.filter((img) => !usage.has(img.id));
+  const reuse = candidates
+    .filter((img) => usage.has(img.id))
+    .sort((a, b) => (usage.get(a.id) ?? 0) - (usage.get(b.id) ?? 0));
+  const picks = [...unused, ...reuse].slice(0, need);
+  if (picks.length === 0) return 0;
 
   // Schedule after the current tail (latest scheduled post), else from now.
-  const tail = queue
-    .filter((r) => r.scheduled_at)
-    .map((r) => new Date(r.scheduled_at as string).getTime())
-    .reduce((m, t) => Math.max(m, t), Date.now());
-  const slots = nextSlots(picks.length, new Date(tail));
+  const slots = nextSlots(picks.length, new Date(tailMs));
   const voice = await brandVoice();
 
   let made = 0;
