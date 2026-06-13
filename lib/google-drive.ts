@@ -8,6 +8,7 @@ type DriveFile = {
   id: string;
   name: string;
   mimeType: string;
+  createdTime?: string;
   thumbnailLink?: string;
   webContentLink?: string;
 };
@@ -60,14 +61,28 @@ async function listFolder(folderId: string, t: string): Promise<DriveFile[]> {
   const q = encodeURIComponent(
     `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
   );
-  const fields = encodeURIComponent("files(id,name,mimeType,thumbnailLink,webContentLink)");
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${fields}&pageSize=50`,
-    { headers: { Authorization: `Bearer ${t}` } },
+  const fields = encodeURIComponent(
+    "nextPageToken, files(id,name,mimeType,createdTime,thumbnailLink,webContentLink)",
   );
-  if (!res.ok) return [];
-  const j = await res.json();
-  return j.files ?? [];
+  // Newest first, and page through the whole folder (the old single 50-file page
+  // hid most of a large album). Capped at 8 pages × 200 so a huge library can't
+  // run the Worker out of subrequests.
+  const orderBy = encodeURIComponent("createdTime desc");
+  const all: DriveFile[] = [];
+  let pageToken: string | undefined;
+  for (let i = 0; i < 8; i++) {
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${fields}&orderBy=${orderBy}&pageSize=200` +
+        (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""),
+      { headers: { Authorization: `Bearer ${t}` } },
+    );
+    if (!res.ok) break;
+    const j = await res.json();
+    all.push(...((j.files ?? []) as DriveFile[]));
+    pageToken = j.nextPageToken;
+    if (!pageToken) break;
+  }
+  return all;
 }
 
 export async function listImages(): Promise<DriveFile[]> {
