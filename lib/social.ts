@@ -4,7 +4,12 @@
 // (app/admin/social/actions.ts) and the scheduler cron (app/api/cron/social),
 // so both paths dispatch identically and flip the draft's status the same way.
 import { createServiceClient } from "@/lib/supabase/service";
-import { listImages, driveImageUrl, driveCaptionUrl } from "@/lib/google-drive";
+import {
+  listImages,
+  driveImageUrl,
+  driveCaptionUrl,
+  driveDirectImageUrl,
+} from "@/lib/google-drive";
 import { captionImage } from "@/lib/anthropic";
 
 // Autopilot: keep a rolling queue of QUEUE_TARGET scheduled posts, going out at
@@ -290,6 +295,7 @@ export async function regenerateDraftCaption(draftId: string): Promise<boolean> 
 }
 
 type DraftRow = {
+  image_ref: string | null;
   image_url: string | null;
   caption: string | null;
   platform_targets: string[];
@@ -318,11 +324,18 @@ export async function dispatchSocialPost(draftId: string): Promise<boolean> {
 
   const { data: draftData } = await sb
     .from("social_drafts")
-    .select("image_url, caption, platform_targets, status")
+    .select("image_ref, image_url, caption, platform_targets, status")
     .eq("id", draftId)
     .maybeSingle();
   const d = draftData as unknown as DraftRow | null;
   if (!d || !DISPATCHABLE.includes(d.status)) return false;
+
+  // Send Instagram/Facebook a direct, scan-free JPEG (the googleusercontent
+  // thumbnail). The stored `uc?export=view` link 302s to Google's virus-scan
+  // interstitial for larger files, which Meta's fetcher rejects with
+  // "Invalid parameter (100)". Fall back to the stored URL if Drive is
+  // unavailable.
+  const imageUrl = (d.image_ref ? await driveDirectImageUrl(d.image_ref) : null) ?? d.image_url;
 
   let posted = false;
   if (webhook) {
@@ -331,7 +344,7 @@ export async function dispatchSocialPost(draftId: string): Promise<boolean> {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          image_url: d.image_url,
+          image_url: imageUrl,
           caption: d.caption,
           platforms: d.platform_targets,
         }),
