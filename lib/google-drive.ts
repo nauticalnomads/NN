@@ -114,11 +114,12 @@ export function driveThumbnailUrl(id: string, size = 400) {
   return `https://drive.google.com/thumbnail?id=${id}&sz=w${size}`;
 }
 
-// A small, publicly-fetchable image URL suitable for sending to the vision model.
-// Drive originals are often multi-MB (over the model's per-image limit), so we use
-// the Drive thumbnail bumped up to ~1600px (lh3 URLs are public + a few hundred KB).
-// Returns null if Drive isn't configured or the file has no thumbnail yet.
-export async function driveCaptionUrl(fileId: string): Promise<string | null> {
+// A direct, publicly-fetchable JPEG URL for a Drive file, resized to `size` px on
+// the long edge. Unlike `uc?export=view` (which 302s to an HTML "can't scan for
+// viruses" interstitial for large files — breaking server-side fetchers like
+// Instagram's Graph API and AI vision), the googleusercontent thumbnail link is a
+// real, scan-free JPEG. Returns null if Drive isn't configured / no thumbnail yet.
+export async function driveDirectImageUrl(fileId: string, size = 2048): Promise<string | null> {
   const { serviceAccountJson } = await getGoogleConfig();
   if (!serviceAccountJson) return null;
   const t = await token(serviceAccountJson);
@@ -131,5 +132,11 @@ export async function driveCaptionUrl(fileId: string): Promise<string | null> {
   const j = await res.json();
   const link: string | undefined = j.thumbnailLink;
   if (!link) return null;
-  return link.replace(/=s\d+$/, "=s1600");
+  return link.replace(/=s\d+$/, `=s${size}`);
+}
+
+// Caption source for the vision model — same direct JPEG, sized down to keep it
+// under the model's per-image limit.
+export async function driveCaptionUrl(fileId: string): Promise<string | null> {
+  return driveDirectImageUrl(fileId, 1600);
 }
