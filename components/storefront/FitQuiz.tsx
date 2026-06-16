@@ -88,7 +88,8 @@ export function FitQuiz() {
               <span className="rounded-sm bg-accent-sea/10 px-2 py-0.5 font-mono text-sub text-accent-sea">
                 {size}
               </span>{" "}
-              for a {FIT_OPTIONS.find((o) => o.value === fit)?.label.toLowerCase()} fit.
+              for a {FIT_OPTIONS.find((o) => o.value === fit)?.label.toLowerCase() ?? "regular"}{" "}
+              fit.
             </p>
           ) : (
             <p className="font-body text-body text-ink/60">

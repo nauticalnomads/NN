@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { NewsletterForm } from "@/components/NewsletterForm";
 import { getCmsValue } from "@/lib/cms";
+import { getCollections } from "@/lib/queries";
 
 type Tag = { label: string; href: string };
 
@@ -84,7 +85,26 @@ function ColHeading({ children }: { children: React.ReactNode }) {
 
 export async function Footer() {
   const cms = await getCmsValue<{ tags: Tag[] }>("footer.tags");
-  const tags = Array.isArray(cms?.tags) && cms.tags.length ? cms.tags : DEFAULT_TAGS;
+  const baseTags = Array.isArray(cms?.tags) && cms.tags.length ? cms.tags : DEFAULT_TAGS;
+
+  // Drop any category chip pointing at a /collections/<slug> that isn't a
+  // published collection, so the footer can never link to a dead page (e.g. a
+  // hardcoded "socks" collection that doesn't exist). If the lookup is empty or
+  // fails (Supabase unconfigured), keep the base list rather than blank the row.
+  let tags = baseTags;
+  try {
+    const live = new Set((await getCollections()).map((c) => c.slug));
+    if (live.size) {
+      const filtered = baseTags.filter((t) => {
+        const m = t.href.match(/^\/collections\/([^/?#]+)/);
+        return !m || live.has(m[1]);
+      });
+      if (filtered.length) tags = filtered;
+    }
+  } catch {
+    /* keep baseTags */
+  }
+
   const year = new Date().getFullYear();
 
   return (
