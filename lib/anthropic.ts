@@ -21,6 +21,7 @@ export async function complete(prompt: string, system?: string): Promise<string 
         ...(system ? { system } : {}),
         messages: [{ role: "user", content: prompt }],
       }),
+      signal: AbortSignal.timeout(25_000),
     });
     if (!res.ok) return null;
     const j = await res.json();
@@ -57,6 +58,7 @@ export async function captionImage(imageUrl: string, brandVoice: string): Promis
           },
         ],
       }),
+      signal: AbortSignal.timeout(25_000),
     });
     if (!res.ok) return null;
     const j = await res.json();
@@ -94,6 +96,7 @@ export async function generateAltText(imageUrl: string): Promise<string | null> 
           },
         ],
       }),
+      signal: AbortSignal.timeout(25_000),
     });
     if (!res.ok) return null;
     const j = await res.json();

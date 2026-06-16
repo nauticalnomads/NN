@@ -15,12 +15,23 @@ const CRON_ROUTES = ["/api/cron/abandoned-cart", "/api/cron/social", "/api/cron/
 export default {
   ...openNextHandler,
   async scheduled(event, env, ctx) {
+    // The cron routes fail closed on a missing secret anyway, but skip the
+    // dispatch entirely (and say why) so a misconfigured deploy is obvious.
+    if (!env.CRON_SECRET) {
+      console.error("CRON_SECRET not set — skipping scheduled jobs");
+      return;
+    }
     for (const path of CRON_ROUTES) {
-      const req = new Request(`https://cron.internal${path}`, {
-        method: "POST",
-        headers: { "x-nn-cron-secret": env.CRON_SECRET ?? "" },
-      });
-      ctx.waitUntil(openNextHandler.fetch(req, env, ctx));
+      // Isolate each job: one route throwing on dispatch must not stop the rest.
+      try {
+        const req = new Request(`https://cron.internal${path}`, {
+          method: "POST",
+          headers: { "x-nn-cron-secret": env.CRON_SECRET },
+        });
+        ctx.waitUntil(openNextHandler.fetch(req, env, ctx));
+      } catch (e) {
+        console.error(`cron dispatch failed for ${path}:`, e);
+      }
     }
   },
 };

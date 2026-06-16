@@ -70,12 +70,26 @@ async function listFolder(folderId: string, t: string): Promise<DriveFile[]> {
   const orderBy = encodeURIComponent("createdTime desc");
   const all: DriveFile[] = [];
   let pageToken: string | undefined;
+  let auth = t;
+  let retried401 = false;
   for (let i = 0; i < 8; i++) {
-    const res = await fetch(
+    const url =
       `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${fields}&orderBy=${orderBy}&pageSize=200` +
-        (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""),
-      { headers: { Authorization: `Bearer ${t}` } },
-    );
+      (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "");
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${auth}` },
+      signal: AbortSignal.timeout(20_000),
+    });
+    // If a cached token expired mid-paging, re-mint once and retry this page.
+    if (res.status === 401 && !retried401) {
+      retried401 = true;
+      cachedToken = null;
+      const fresh = await tokenFromCache();
+      if (!fresh) break;
+      auth = fresh;
+      i--; // redo this page with the new token
+      continue;
+    }
     if (!res.ok) break;
     const j = await res.json();
     all.push(...((j.files ?? []) as DriveFile[]));
@@ -83,6 +97,14 @@ async function listFolder(folderId: string, t: string): Promise<DriveFile[]> {
     if (!pageToken) break;
   }
   return all;
+}
+
+// Re-mint a Drive token using the configured service account (used to recover
+// from a mid-request 401 when the cached token has just expired).
+async function tokenFromCache(): Promise<string | null> {
+  const { serviceAccountJson } = await getGoogleConfig();
+  if (!serviceAccountJson) return null;
+  return token(serviceAccountJson);
 }
 
 export async function listImages(): Promise<DriveFile[]> {
