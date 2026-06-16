@@ -348,9 +348,18 @@ export async function dispatchSocialPost(draftId: string): Promise<boolean> {
           caption: d.caption,
           platforms: d.platform_targets,
         }),
+        // Don't let a hung Make/Meta request stall the cron tick.
+        signal: AbortSignal.timeout(20_000),
       });
       posted = r.ok;
-    } catch {
+      if (!r.ok) {
+        // Surface why Make/Meta rejected it (e.g. the Instagram OAuth/image
+        // errors) instead of failing silently.
+        const body = await r.text().catch(() => "");
+        console.error(`Make webhook rejected (${r.status}):`, body.slice(0, 500));
+      }
+    } catch (e) {
+      console.error("Make webhook request failed:", e instanceof Error ? e.message : e);
       posted = false;
     }
   }

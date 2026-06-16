@@ -26,7 +26,8 @@ export async function POST(request: NextRequest) {
     .select("id, email, shipping_quote, created_at")
     .eq("status", "pending")
     .lt("created_at", hourAgo)
-    .gt("created_at", threeAgo);
+    .gt("created_at", threeAgo)
+    .limit(200); // bound the per-tick work so a busy window can't exceed Worker limits
   const rows =
     (data as unknown as Array<{
       id: string;
