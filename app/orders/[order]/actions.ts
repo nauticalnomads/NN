@@ -48,9 +48,14 @@ export async function requestRefund(payload: { orderId: string; reason: string; 
     .maybeSingle();
   if (existing) return { error: "A refund is already in progress for this order." };
 
-  // Amount + currency come from the order, NOT the client.
+  // Amount + currency come from the order, NOT the client. Sanity-bound the
+  // amount as defence-in-depth against a corrupted grand_total feeding the
+  // later Stripe refund.
   const amount = order.grand_total;
   const currency = order.currency;
+  if (!Number.isFinite(Number(amount)) || Number(amount) <= 0 || Number(amount) > 100000) {
+    return { error: "This order can't be refunded automatically — please contact us." };
+  }
 
   await sb.from("refunds").insert({
     order_id: orderId,
@@ -68,8 +73,12 @@ export async function requestRefund(payload: { orderId: string; reason: string; 
     order_id: orderId,
   } as never);
 
-  sendRefundUpdate(orderId, "requested", amount, currency).catch(() => undefined);
+  sendRefundUpdate(orderId, "requested", amount, currency).catch((e) =>
+    console.error("refund request email:", e),
+  );
   // Owner alert (gated by notification_prefs), separate from the customer email.
-  notifyOwner("refund_requested", "Refund requested", detail).catch(() => undefined);
+  notifyOwner("refund_requested", "Refund requested", detail).catch((e) =>
+    console.error("refund owner alert:", e),
+  );
   return { ok: true };
 }

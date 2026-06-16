@@ -137,7 +137,21 @@ async function printifyQuote(items: CartLine[], addr: ShippingAddress): Promise<
 }
 
 // ── orchestrator ─────────────────────────────────────────────────────────────
-const cache = new Map<string, Quote>();
+// Per-(cart × destination) quote cache. Entries expire so a shipping-settings
+// change (flat zones / mode) is picked up within QUOTE_TTL_MS rather than living
+// for the whole isolate lifetime.
+const QUOTE_TTL_MS = 5 * 60_000;
+const cache = new Map<string, { q: Quote; exp: number }>();
+function cacheGet(key: string): Quote | null {
+  const e = cache.get(key);
+  if (e && e.exp > Date.now()) return e.q;
+  if (e) cache.delete(key);
+  return null;
+}
+function cacheSet(key: string, q: Quote): Quote {
+  cache.set(key, { q, exp: Date.now() + QUOTE_TTL_MS });
+  return q;
+}
 
 export async function quoteShipping(
   items: CartLine[] | { quantity: number }[] | number,
@@ -152,7 +166,7 @@ export async function quoteShipping(
     addr: { c: addr.country, z: addr.postal_code },
     items: lines.map((l) => [l.provider, l.provider_variant_id, l.quantity]),
   });
-  const cached = cache.get(key);
+  const cached = cacheGet(key);
   if (cached) return cached;
 
   // Read shipping mode (live vs flat) from settings; default live.
@@ -167,9 +181,7 @@ export async function quoteShipping(
   }
 
   if (mode === "flat") {
-    const q = await flatQuote(addr);
-    cache.set(key, q);
-    return q;
+    return cacheSet(key, await flatQuote(addr));
   }
 
   // Live mode — sum across providers; on any failure, log + flat-fallback.
@@ -180,13 +192,11 @@ export async function quoteShipping(
 
   if (failures.length) {
     const f = await flatQuote(addr);
-    const q: Quote = { ...f, mode: "live", failures };
-    cache.set(key, q);
-    return q;
+    return cacheSet(key, { ...f, mode: "live", failures });
   }
 
   const rate = (pf ?? 0) + (py ?? 0);
-  const q: Quote = {
+  return cacheSet(key, {
     rate,
     zone: "Live POD quote",
     mode: "live",
@@ -194,7 +204,5 @@ export async function quoteShipping(
       ...(pf != null ? { printful: pf } : {}),
       ...(py != null ? { printify: py } : {}),
     },
-  };
-  cache.set(key, q);
-  return q;
+  });
 }
