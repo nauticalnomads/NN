@@ -50,13 +50,17 @@ export async function POST(request: NextRequest) {
         .eq("id", orderExternalId)
         .maybeSingle();
       const cur = (row as unknown as { tracking: unknown[]; status: string } | null) ?? null;
-      const next = [...(cur?.tracking ?? []), tracking];
+      // Append, capped, so a flood of duplicate shipment webhooks can't grow the
+      // tracking array without bound.
+      const prev = Array.isArray(cur?.tracking) ? cur.tracking : [];
+      const next = [...prev, tracking].slice(-50);
+      // Never resurrect a closed order or downgrade a delivered one — a late or
+      // duplicate "shipped" webhook must not flip cancelled/refunded/delivered.
+      const keep = ["cancelled", "refunded", "delivered"];
+      const status = cur?.status && keep.includes(cur.status) ? cur.status : "shipped";
       await sb
         .from("orders")
-        .update({
-          tracking: next,
-          status: cur?.status === "delivered" ? "delivered" : "shipped",
-        } as never)
+        .update({ tracking: next, status } as never)
         .eq("id", orderExternalId);
       sendShippingConfirmation(orderExternalId, tracking).catch((e) =>
         console.error("ship email:", e),

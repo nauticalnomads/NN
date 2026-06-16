@@ -46,6 +46,10 @@ export async function POST(request: Request) {
         const s = event.data.object as Stripe.Checkout.Session;
         const orderId = s.metadata?.order_id;
         if (!orderId) break;
+        // Only finalize genuinely-paid sessions. A session can complete `unpaid`
+        // (async payment methods, or a voided/expired flow), and we must never
+        // mark such an order paid.
+        if (s.payment_status && s.payment_status !== "paid") break;
         const pi = typeof s.payment_intent === "string" ? s.payment_intent : null;
         // Shared with the order-page fallback; idempotent + fires side effects.
         await markOrderPaid(orderId, pi);
@@ -95,7 +99,9 @@ export async function POST(request: Request) {
                 .from("orders")
                 .update({ status: "refunded" } as never)
                 .eq("id", ord.id);
-              sendRefundUpdate(ord.id, "completed", amount, sr.currency).catch(() => undefined);
+              sendRefundUpdate(ord.id, "completed", amount, sr.currency).catch((e) =>
+                console.error("refund email:", e),
+              );
             }
             continue;
           }
@@ -133,7 +139,9 @@ export async function POST(request: Request) {
             .from("orders")
             .update({ status: "refunded" } as never)
             .eq("id", ord.id);
-          sendRefundUpdate(ord.id, "completed", amount, sr.currency).catch(() => undefined);
+          sendRefundUpdate(ord.id, "completed", amount, sr.currency).catch((e) =>
+            console.error("refund email:", e),
+          );
         }
         break;
       }
@@ -175,7 +183,9 @@ export async function POST(request: Request) {
             .from("orders")
             .update({ status: "refunded" } as never)
             .eq("id", ex.order_id);
-          sendRefundUpdate(ex.order_id, "completed", ex.amount, ex.currency).catch(() => undefined);
+          sendRefundUpdate(ex.order_id, "completed", ex.amount, ex.currency).catch((e) =>
+            console.error("refund email:", e),
+          );
         }
         break;
       }

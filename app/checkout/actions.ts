@@ -202,7 +202,15 @@ export async function createCheckoutSession(
       currency: currencyUpper,
     };
   });
-  await sb.from("order_items").insert(itemRows as never);
+  const { error: itemsErr } = await sb.from("order_items").insert(itemRows as never);
+  if (itemsErr) {
+    // Never leave a hollow order (row but no items) that could still reach
+    // Stripe. No credit has been reserved yet at this point, so deleting the
+    // order row is a clean rollback.
+    console.error("order_items insert failed:", itemsErr.message);
+    await sb.from("orders").delete().eq("id", orderId);
+    return { error: "Couldn't open a checkout session. Try again." };
+  }
 
   // Reserve the credit redemptions (debited on payment).
   if (giftCardId && giftRedeem > 0) {
