@@ -99,7 +99,7 @@ export function ProductReviews({
           </p>
         ) : (
           <Link
-            href={`/login?next=/products/${slug}`}
+            href={`/account/login?next=/products/${slug}`}
             className="rounded-sm border border-ink/30 px-4 py-2 font-mono text-caption tracking-widest text-ink uppercase no-underline transition-colors hover:border-ink/60"
           >
             Sign in to review
