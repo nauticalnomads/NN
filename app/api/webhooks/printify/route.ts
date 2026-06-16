@@ -35,8 +35,14 @@ export async function POST(request: NextRequest) {
         .eq("id", orderId)
         .maybeSingle();
       const cur = (row as unknown as { tracking: unknown[]; status: string } | null) ?? null;
-      const next = [...(cur?.tracking ?? []), tracking];
-      const status = event.type === "order:shipment:delivered" ? "delivered" : "shipped";
+      // Append, capped, so duplicate shipment webhooks can't grow the array.
+      const prev = Array.isArray(cur?.tracking) ? cur.tracking : [];
+      const next = [...prev, tracking].slice(-50);
+      // Don't resurrect a closed order (cancelled/refunded) or downgrade a
+      // delivered one back to shipped.
+      let status = event.type === "order:shipment:delivered" ? "delivered" : "shipped";
+      if (cur?.status === "cancelled" || cur?.status === "refunded") status = cur.status;
+      else if (cur?.status === "delivered") status = "delivered";
       await sb
         .from("orders")
         .update({ tracking: next, status } as never)
