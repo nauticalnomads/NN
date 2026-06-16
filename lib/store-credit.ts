@@ -176,10 +176,26 @@ export async function reserveCredit(opts: {
   currency?: string;
 }): Promise<number> {
   const currency = (opts.currency ?? "GBP").toUpperCase();
-  const available = await getAvailableCredit(opts.customerId, currency);
-  const redeem = round2(Math.min(opts.amount, available));
-  if (!(redeem > 0)) return 0;
   const sb = createServiceClient();
+  // Net available = applied balance + already-pending reservations (which are
+  // stored negative), summed signed. Counting existing pending reservations
+  // here stops two concurrent checkouts from each reserving — and each
+  // receiving a Stripe discount for — the same balance. Settlement
+  // (applyReservedCredit) re-caps to the real balance as the final backstop.
+  const { data: bal } = await sb
+    .from("store_credit_transactions")
+    .select("amount")
+    .eq("customer_id", opts.customerId)
+    .eq("currency", currency)
+    .in("status", ["applied", "pending"]);
+  const net = round2(
+    ((bal as unknown as Array<{ amount: number | string }>) ?? []).reduce(
+      (s, r) => s + Number(r.amount),
+      0,
+    ),
+  );
+  const redeem = round2(Math.min(opts.amount, Math.max(0, net)));
+  if (!(redeem > 0)) return 0;
   const { error } = await sb.from("store_credit_transactions").insert({
     customer_id: opts.customerId,
     amount: -redeem,
