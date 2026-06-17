@@ -2,6 +2,7 @@ import { requireOps } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { updateSettings, saveIntegrations } from "./actions";
 import { ZoneEditor, type Zone } from "./ZoneEditor";
+import { ConnectionTester } from "./ConnectionTester";
 import { getIntegrationConfig, getGoogleConfig } from "@/lib/integrations";
 import { absoluteUrl } from "@/lib/site";
 import { SubmitButton } from "@/components/admin/SubmitButton";
@@ -305,6 +306,10 @@ notify pgrst, 'reload schema';`}</pre>
           <div className="break-all text-ink">Printful → {pfWebhook}</div>
           <div className="break-all text-ink">Printify → {piWebhook}</div>
         </div>
+
+        {/* Live connection check — confirms the saved keys actually authenticate,
+            not just that they're filled in. */}
+        <ConnectionTester />
 
         <form action={saveIntegrations} className="mt-5 space-y-4">
           <p className="font-mono text-caption tracking-wide text-accent-sun uppercase">Printful</p>

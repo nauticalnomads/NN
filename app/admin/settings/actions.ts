@@ -4,6 +4,28 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireOps } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
+import {
+  checkPrintful,
+  checkPrintify,
+  checkStripe,
+  type HealthResult,
+} from "@/lib/integration-health";
+
+// Live connection test for the admin "Test connections" button. Ops-gated; pings
+// each provider with the saved credentials and returns whether they authenticate.
+export async function testConnections(): Promise<{
+  printful: HealthResult;
+  printify: HealthResult;
+  stripe: HealthResult;
+}> {
+  await requireOps();
+  const [printful, printify, stripe] = await Promise.all([
+    checkPrintful(),
+    checkPrintify(),
+    checkStripe(),
+  ]);
+  return { printful, printify, stripe };
+}
 
 // Save POD provider credentials to store_settings. Write-only: only fields with
 // a new (non-empty) value are updated, so blanks keep the current secret. Needs

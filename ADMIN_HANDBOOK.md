@@ -299,7 +299,15 @@ double-place an order or double-charge anything.
 ## 10. Are Printful & Printify actually connected? (how to check)
 
 The connection is configured in **Settings → POD providers** (or via the
-Cloudflare environment). To verify it's live:
+Cloudflare environment).
+
+**Quickest check — the "Test connections" button.** In **Settings → POD
+providers** click **Test connections**. It pings Printful, Printify and Stripe
+live with your saved keys and shows **✓ live** (authenticated) or **✗ fail**
+with the reason (e.g. "Key rejected", "no Shop ID set"). This confirms the keys
+actually work, not just that they're filled in.
+
+Other ways to verify:
 
 1. **Printful:** open **Products → Import from Printful**. If the top says
    **"✓ Connected to Printful"** with your store name, the API key works. If it
