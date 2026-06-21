@@ -8,9 +8,16 @@
 //   - /api/cron/abandoned-cart — nudges still-pending carts.
 //   - /api/cron/social         — publishes social drafts whose scheduled_at passed.
 //   - /api/cron/blog           — publishes blog posts whose scheduled_at passed.
+//   - /api/cron/cleanup-pending — cancels abandoned pending orders + frees their
+//     credit/gift-card reservations.
 import openNextHandler from "./.open-next/worker.js";
 
-const CRON_ROUTES = ["/api/cron/abandoned-cart", "/api/cron/social", "/api/cron/blog"];
+const CRON_ROUTES = [
+  "/api/cron/abandoned-cart",
+  "/api/cron/social",
+  "/api/cron/blog",
+  "/api/cron/cleanup-pending",
+];
 
 export default {
   ...openNextHandler,

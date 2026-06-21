@@ -98,9 +98,24 @@ export async function getRedeemableCard(
   if (!(balance > 0)) return null;
   if (card.currency.toUpperCase() !== currency.toUpperCase()) return null;
   if (card.expires_at && new Date(card.expires_at).getTime() < Date.now()) return null;
+
+  // Subtract any in-flight (pending) reservations so two concurrent orders
+  // can't both reserve the same balance and each receive a Stripe discount for
+  // it. Settlement (debitCard, a CAS on balance) is the final backstop.
+  const { data: pend } = await sb
+    .from("gift_card_redemptions")
+    .select("amount")
+    .eq("gift_card_id", card.id)
+    .eq("status", "pending");
+  const reserved = ((pend as unknown as Array<{ amount: number | string }>) ?? []).reduce(
+    (s, r) => s + Number(r.amount),
+    0,
+  );
+  const available = round2(balance - reserved);
+  if (!(available > 0)) return null;
   return {
     id: card.id,
-    balance,
+    balance: available,
     currency: card.currency.toUpperCase(),
     expires_at: card.expires_at,
   };
