@@ -3,6 +3,7 @@
 // and service-account JSON can be pasted in the admin without redeploying.
 
 import { getGoogleConfig } from "@/lib/integrations";
+import { absoluteUrl } from "@/lib/site";
 
 type DriveFile = {
   id: string;
@@ -127,6 +128,13 @@ export async function listEmailCoverImages(): Promise<DriveFile[]> {
 // shared "anyone with the link".
 export function driveImageUrl(id: string) {
   return `https://drive.google.com/uc?export=view&id=${id}`;
+}
+
+// Our own-domain proxy URL for a Drive image (see app/api/social-image/[id]).
+// Used as the image we hand to Make.com → Instagram/Facebook so Meta always
+// fetches a clean public JPEG from us, never a flaky Google link.
+export function socialImageUrl(id: string) {
+  return absoluteUrl(`/api/social-image/${id}`);
 }
 
 // A browser-renderable thumbnail URL (works directly in <img> for files shared

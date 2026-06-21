@@ -4,12 +4,7 @@
 // (app/admin/social/actions.ts) and the scheduler cron (app/api/cron/social),
 // so both paths dispatch identically and flip the draft's status the same way.
 import { createServiceClient } from "@/lib/supabase/service";
-import {
-  listImages,
-  driveImageUrl,
-  driveCaptionUrl,
-  driveDirectImageUrl,
-} from "@/lib/google-drive";
+import { listImages, driveImageUrl, driveCaptionUrl, socialImageUrl } from "@/lib/google-drive";
 import { captionImage } from "@/lib/anthropic";
 
 // Autopilot: keep a rolling queue of QUEUE_TARGET scheduled posts, going out at
@@ -330,12 +325,12 @@ export async function dispatchSocialPost(draftId: string): Promise<boolean> {
   const d = draftData as unknown as DraftRow | null;
   if (!d || !DISPATCHABLE.includes(d.status)) return false;
 
-  // Send Instagram/Facebook a direct, scan-free JPEG (the googleusercontent
-  // thumbnail). The stored `uc?export=view` link 302s to Google's virus-scan
-  // interstitial for larger files, which Meta's fetcher rejects with
-  // "Invalid parameter (100)". Fall back to the stored URL if Drive is
-  // unavailable.
-  const imageUrl = (d.image_ref ? await driveDirectImageUrl(d.image_ref) : null) ?? d.image_url;
+  // Hand Meta an image served from OUR domain (app/api/social-image/[id]), which
+  // proxies a clean JPEG. Google's own links are unreliable for Meta's
+  // server-side fetcher (sharing/redirect/CDN quirks) and caused "Invalid
+  // parameter (100)" and "Media ID is not available (9007)". Fall back to the
+  // stored URL only if we have no Drive file id.
+  const imageUrl = d.image_ref ? socialImageUrl(d.image_ref) : d.image_url;
 
   let posted = false;
   if (webhook) {
