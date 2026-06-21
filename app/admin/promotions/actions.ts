@@ -23,6 +23,9 @@ export async function createPromoCode(formData: FormData): Promise<void> {
   }
   const starts_at = startsRaw ? new Date(startsRaw).toISOString() : null;
   const ends_at = endsRaw ? new Date(endsRaw).toISOString() : null;
+  if (starts_at && ends_at && new Date(starts_at) >= new Date(ends_at)) {
+    redirect("/admin/promotions?notice=bad_window");
+  }
 
   const sb = createServiceClient();
   const { error } = await sb

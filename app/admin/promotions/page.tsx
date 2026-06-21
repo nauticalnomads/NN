@@ -10,6 +10,7 @@ const NOTICE: Record<string, { text: string; warn: boolean }> = {
   duplicate: { text: "That code already exists.", warn: true },
   bad_code: { text: "Codes need at least 3 characters.", warn: true },
   bad_percent: { text: "Percent must be between 1 and 100.", warn: true },
+  bad_window: { text: "The start must be before the end.", warn: true },
   migrate: {
     text: "Couldn't save — run the promo_codes migration (supabase/migrations/20260612200000_promo_codes.sql) first.",
     warn: true,
