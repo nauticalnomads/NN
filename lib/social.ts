@@ -4,12 +4,7 @@
 // (app/admin/social/actions.ts) and the scheduler cron (app/api/cron/social),
 // so both paths dispatch identically and flip the draft's status the same way.
 import { createServiceClient } from "@/lib/supabase/service";
-import {
-  listImages,
-  driveImageUrl,
-  driveCaptionUrl,
-  driveDirectImageUrl,
-} from "@/lib/google-drive";
+import { listImages, driveImageUrl, driveCaptionUrl, socialImageUrl } from "@/lib/google-drive";
 import { captionImage } from "@/lib/anthropic";
 
 // Autopilot: keep a rolling queue of QUEUE_TARGET scheduled posts, going out at
@@ -228,7 +223,20 @@ export async function rebuildQueueFromOrder(orderOverride?: string[]): Promise<n
   if (images.length === 0) return 0;
 
   const order = orderOverride && orderOverride.length ? orderOverride : await getImageOrder();
-  const picks = applyImageOrder(images, order).slice(0, QUEUE_TARGET);
+  const ordered = applyImageOrder(images, order);
+
+  // Prefer photos that have never been used over already-posted/queued ones, so a
+  // rebuild fills the queue with NEW images first and doesn't re-post recent ones
+  // while unused photos exist. Within each group the drag order is preserved.
+  const { data: used } = await sb.from("social_drafts").select("image_ref");
+  const usedRefs = new Set(
+    ((used as unknown as { image_ref: string | null }[]) ?? [])
+      .map((r) => r.image_ref)
+      .filter(Boolean) as string[],
+  );
+  const fresh = ordered.filter((img) => !usedRefs.has(img.id));
+  const reuse = ordered.filter((img) => usedRefs.has(img.id));
+  const picks = [...fresh, ...reuse].slice(0, QUEUE_TARGET);
 
   // Wipe the pending queue (keep posted/failed history).
   await sb.from("social_drafts").delete().in("status", ["draft", "scheduled"]);
@@ -330,12 +338,12 @@ export async function dispatchSocialPost(draftId: string): Promise<boolean> {
   const d = draftData as unknown as DraftRow | null;
   if (!d || !DISPATCHABLE.includes(d.status)) return false;
 
-  // Send Instagram/Facebook a direct, scan-free JPEG (the googleusercontent
-  // thumbnail). The stored `uc?export=view` link 302s to Google's virus-scan
-  // interstitial for larger files, which Meta's fetcher rejects with
-  // "Invalid parameter (100)". Fall back to the stored URL if Drive is
-  // unavailable.
-  const imageUrl = (d.image_ref ? await driveDirectImageUrl(d.image_ref) : null) ?? d.image_url;
+  // Hand Meta an image served from OUR domain (app/api/social-image/[id]), which
+  // proxies a clean JPEG. Google's own links are unreliable for Meta's
+  // server-side fetcher (sharing/redirect/CDN quirks) and caused "Invalid
+  // parameter (100)" and "Media ID is not available (9007)". Fall back to the
+  // stored URL only if we have no Drive file id.
+  const imageUrl = d.image_ref ? socialImageUrl(d.image_ref) : d.image_url;
 
   let posted = false;
   if (webhook) {

@@ -3,6 +3,7 @@
 // and service-account JSON can be pasted in the admin without redeploying.
 
 import { getGoogleConfig } from "@/lib/integrations";
+import { absoluteUrl } from "@/lib/site";
 
 type DriveFile = {
   id: string;
@@ -129,6 +130,13 @@ export function driveImageUrl(id: string) {
   return `https://drive.google.com/uc?export=view&id=${id}`;
 }
 
+// Our own-domain proxy URL for a Drive image (see app/api/social-image/[id]).
+// Used as the image we hand to Make.com → Instagram/Facebook so Meta always
+// fetches a clean public JPEG from us, never a flaky Google link.
+export function socialImageUrl(id: string) {
+  return absoluteUrl(`/api/social-image/${id}`);
+}
+
 // A browser-renderable thumbnail URL (works directly in <img> for files shared
 // "anyone with the link"). Unlike uc?export=view, this returns a real image
 // instead of a download redirect, so it shows in previews. Default ~400px wide.
@@ -161,4 +169,27 @@ export async function driveDirectImageUrl(fileId: string, size = 2048): Promise<
 // under the model's per-image limit.
 export async function driveCaptionUrl(fileId: string): Promise<string | null> {
   return driveDirectImageUrl(fileId, 1600);
+}
+
+// Authenticated raw download of a Drive file's bytes + real MIME type, via the
+// service account (works regardless of public sharing). Used by the social image
+// proxy so Meta always receives genuine image bytes. Returns null on any failure.
+export async function driveRawImage(
+  fileId: string,
+): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+  const { serviceAccountJson } = await getGoogleConfig();
+  if (!serviceAccountJson) return null;
+  const t = await token(serviceAccountJson);
+  if (!t) return null;
+  try {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      headers: { Authorization: `Bearer ${t}` },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) return null;
+    const contentType = res.headers.get("content-type") || "application/octet-stream";
+    return { bytes: await res.arrayBuffer(), contentType };
+  } catch {
+    return null;
+  }
 }
