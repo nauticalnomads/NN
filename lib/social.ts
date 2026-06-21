@@ -223,7 +223,20 @@ export async function rebuildQueueFromOrder(orderOverride?: string[]): Promise<n
   if (images.length === 0) return 0;
 
   const order = orderOverride && orderOverride.length ? orderOverride : await getImageOrder();
-  const picks = applyImageOrder(images, order).slice(0, QUEUE_TARGET);
+  const ordered = applyImageOrder(images, order);
+
+  // Prefer photos that have never been used over already-posted/queued ones, so a
+  // rebuild fills the queue with NEW images first and doesn't re-post recent ones
+  // while unused photos exist. Within each group the drag order is preserved.
+  const { data: used } = await sb.from("social_drafts").select("image_ref");
+  const usedRefs = new Set(
+    ((used as unknown as { image_ref: string | null }[]) ?? [])
+      .map((r) => r.image_ref)
+      .filter(Boolean) as string[],
+  );
+  const fresh = ordered.filter((img) => !usedRefs.has(img.id));
+  const reuse = ordered.filter((img) => usedRefs.has(img.id));
+  const picks = [...fresh, ...reuse].slice(0, QUEUE_TARGET);
 
   // Wipe the pending queue (keep posted/failed history).
   await sb.from("social_drafts").delete().in("status", ["draft", "scheduled"]);

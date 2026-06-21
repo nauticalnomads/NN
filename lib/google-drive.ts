@@ -170,3 +170,26 @@ export async function driveDirectImageUrl(fileId: string, size = 2048): Promise<
 export async function driveCaptionUrl(fileId: string): Promise<string | null> {
   return driveDirectImageUrl(fileId, 1600);
 }
+
+// Authenticated raw download of a Drive file's bytes + real MIME type, via the
+// service account (works regardless of public sharing). Used by the social image
+// proxy so Meta always receives genuine image bytes. Returns null on any failure.
+export async function driveRawImage(
+  fileId: string,
+): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+  const { serviceAccountJson } = await getGoogleConfig();
+  if (!serviceAccountJson) return null;
+  const t = await token(serviceAccountJson);
+  if (!t) return null;
+  try {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      headers: { Authorization: `Bearer ${t}` },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) return null;
+    const contentType = res.headers.get("content-type") || "application/octet-stream";
+    return { bytes: await res.arrayBuffer(), contentType };
+  } catch {
+    return null;
+  }
+}
